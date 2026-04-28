@@ -1,0 +1,71 @@
+name: Deploy to HuggingFace Spaces
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Deploy Backend to HF Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python - <<'EOF'
+          from huggingface_hub import HfApi
+          import os, shutil
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          repo_id = "husnulirdoq/wellbeing-backend"
+
+          api.create_repo(repo_id=repo_id, repo_type="space",
+                          space_sdk="docker", exist_ok=True)
+
+          for f in ["main.py", "database.py", "models.py", "auth.py",
+                    "garmin_service.py", "payment_service.py",
+                    "requirements.txt", "Dockerfile", "README.md"]:
+              path = f"backend/{f}"
+              if os.path.exists(path):
+                  api.upload_file(path_or_fileobj=path, path_in_repo=f,
+                                  repo_id=repo_id, repo_type="space")
+          print("Backend deployed!")
+          EOF
+
+  deploy-admin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          lfs: true
+
+      - name: Deploy Admin to HF Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          pip install huggingface_hub
+          python - <<'EOF'
+          from huggingface_hub import HfApi
+          import os
+
+          api = HfApi(token=os.environ["HF_TOKEN"])
+          repo_id = "husnulirdoq/wellbeing-admin"
+
+          api.create_repo(repo_id=repo_id, repo_type="space",
+                          space_sdk="streamlit", exist_ok=True)
+
+          for f in ["app.py", "requirements.txt", "Dockerfile", "README.md"]:
+              path = f"admin/{f}"
+              if os.path.exists(path):
+                  api.upload_file(path_or_fileobj=path, path_in_repo=f,
+                                  repo_id=repo_id, repo_type="space")
+          print("Admin deployed!")
+          EOF

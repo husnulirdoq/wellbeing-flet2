@@ -4,6 +4,7 @@ import os
 from datetime import datetime
 
 API_URL = os.getenv("API_URL", "http://backend:8000")
+WEB_PORT = int(os.getenv("WEB_PORT", "0")) or None
 
 BG = "#F0F4FF"
 PRIMARY = "#4F46E5"
@@ -761,4 +762,7 @@ def main(page: ft.Page):
     navigate("Login")
     page.add(page_container)
 
-ft.app(main, port=8080)
+if WEB_PORT:
+    ft.app(main, port=WEB_PORT)
+else:
+    ft.app(main)
