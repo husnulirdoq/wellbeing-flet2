@@ -18,19 +18,19 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Set up Java (required for Android build)
+      - name: Set up Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
 
-      - name: Set up Flutter
+      - name: Set up Flutter 3.41.4
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: "3.24.0"
+          flutter-version: "3.41.4"
           channel: stable
 
-      - name: Install Android SDK cmdline-tools
+      - name: Install Android SDK
         run: |
           sudo apt-get update -y
           sudo apt-get install -y wget unzip
@@ -47,18 +47,20 @@ jobs:
           yes | sdkmanager --licenses
           sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
-      - name: Install Flet & dependencies
-        run: |
-          pip install flet==0.84.0
-          pip install -r frontend/requirements.txt
+      - name: Install Flet
+        run: pip install flet==0.84.0
+
+      - name: Install frontend dependencies
+        run: pip install -r frontend/requirements.txt
 
       - name: Build APK
         working-directory: frontend
         timeout-minutes: 30
         run: |
-          flet build apk --project "WellBeing Tracker" --org com.wellbeing.tracker --verbose
+          echo "y" | flet build apk --project "WellBeing Tracker" --org com.wellbeing.tracker
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          CI: true
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
