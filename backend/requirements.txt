@@ -3,3 +3,12 @@ uvicorn
 pydantic
 requests
 transformers
+huggingface_hub
+sqlalchemy
+psycopg2-binary
+pgvector
+bcrypt
+python-jose[cryptography]
+python-multipart
+garminconnect
+midtransclient
