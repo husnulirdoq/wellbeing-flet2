@@ -1,0 +1,41 @@
+# --- Python & Flet ---
+__pycache__/
+*.py[cod]
+*$py.class
+.env
+.venv
+env/
+venv/
+ENV/
+build/
+dist/
+*.spec
+
+# --- Flet specific ---
+# Mengabaikan folder output saat build flet (misalnya: flet build apk)
+.flet_build/
+flet_metadata.json
+
+# --- Docker ---
+.dockerignore
+# Jika kamu menyimpan data container secara lokal
+docker_data/
+*.log
+
+# --- Android / Build Tools ---
+# Jika kamu melakukan build di dalam container yang mapping ke host
+.gradle/
+local.properties
+*.apk
+*.aab
+*.keystore
+*.jks
+captures/
+
+# --- Editor / OS ---
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

@@ -1,0 +1,30 @@
+services:
+  backend:
+    build: ./backend
+    container_name: wellbeing_backend
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+    environment:
+      - HF_TOKEN=${HF_TOKEN:-your_token_here}
+
+  frontend:
+    build: ./frontend
+    container_name: wellbeing_frontend
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./frontend:/app
+    depends_on:
+      - backend
+
+  admin:
+    build: ./admin
+    container_name: wellbeing_admin
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./admin:/app
+    depends_on:
+      - backend
