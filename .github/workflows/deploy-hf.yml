@@ -10,48 +10,34 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          lfs: true
 
-      - name: Deploy Backend to HF Spaces
+      - name: Push backend to HF Space
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
-          pip install huggingface_hub
-          python - <<'EOF'
-          from huggingface_hub import HfApi
-          import os
-
-          api = HfApi(token=os.environ["HF_TOKEN"])
-          repo_id = "husnulirdoq/wellbeing-backend"
-
-          try:
-              api.create_repo(repo_id=repo_id, repo_type="space",
-                              space_sdk="docker", exist_ok=True)
-          except Exception as e:
-              print(f"Repo create skipped: {e}")
-
-          for f in ["main.py", "database.py", "models.py", "auth.py",
-                    "garmin_service.py", "payment_service.py",
-                    "requirements.txt", "Dockerfile", "README.md"]:
-              path = f"backend/{f}"
-              if os.path.exists(path):
-                  api.upload_file(path_or_fileobj=path, path_in_repo=f,
-                                  repo_id=repo_id, repo_type="space")
-                  print(f"Uploaded {f}")
-          print("Backend deployed!")
-          EOF
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub Actions"
+          git clone https://husnulirdoq:$HF_TOKEN@huggingface.co/spaces/husnulirdoq/wellbeing-backend hf-backend
+          cp backend/main.py hf-backend/
+          cp backend/database.py hf-backend/
+          cp backend/models.py hf-backend/
+          cp backend/auth.py hf-backend/
+          cp backend/garmin_service.py hf-backend/
+          cp backend/payment_service.py hf-backend/
+          cp backend/requirements.txt hf-backend/
+          cp backend/Dockerfile hf-backend/
+          cp backend/README.md hf-backend/
+          cd hf-backend
+          git add .
+          git diff --staged --quiet || git commit -m "deploy: update from GitHub"
+          git push
 
   deploy-admin:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          lfs: true
 
-      - name: Deploy Admin to HF Spaces
+      - name: Create admin Space if not exists
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         run: |
@@ -59,21 +45,34 @@ jobs:
           python - <<'EOF'
           from huggingface_hub import HfApi
           import os
-
           api = HfApi(token=os.environ["HF_TOKEN"])
-          repo_id = "husnulirdoq/wellbeing-admin"
-
           try:
-              api.create_repo(repo_id=repo_id, repo_type="space",
-                              space_sdk="streamlit", exist_ok=True)
+              api.create_repo(
+                  repo_id="husnulirdoq/wellbeing-admin",
+                  repo_type="space",
+                  space_sdk="streamlit",
+                  exist_ok=True
+              )
+              print("Space created or already exists")
           except Exception as e:
-              print(f"Repo create skipped: {e}")
-
-          for f in ["app.py", "requirements.txt", "Dockerfile", "README.md"]:
-              path = f"admin/{f}"
-              if os.path.exists(path):
-                  api.upload_file(path_or_fileobj=path, path_in_repo=f,
-                                  repo_id=repo_id, repo_type="space")
-                  print(f"Uploaded {f}")
-          print("Admin deployed!")
+              print(f"Note: {e}")
           EOF
+
+      - name: Push admin to HF Space
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.email "ci@github.com"
+          git config --global user.name "GitHub Actions"
+          git clone https://husnulirdoq:$HF_TOKEN@huggingface.co/spaces/husnulirdoq/wellbeing-admin hf-admin || true
+          if [ -d "hf-admin" ]; then
+            cp admin/app.py hf-admin/
+            cp admin/requirements.txt hf-admin/
+            cp admin/README.md hf-admin/
+            cd hf-admin
+            git add .
+            git diff --staged --quiet || git commit -m "deploy: update from GitHub"
+            git push
+          else
+            echo "Admin space not found, skipping push"
+          fi
