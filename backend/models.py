@@ -1,8 +1,13 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.orm import relationship
-from pgvector.sqlalchemy import Vector
 from datetime import datetime
 from database import Base
+
+try:
+    from pgvector.sqlalchemy import Vector
+    VECTOR_AVAILABLE = True
+except Exception:
+    VECTOR_AVAILABLE = False
 
 class User(Base):
     __tablename__ = "users"
@@ -26,7 +31,7 @@ class WellbeingEntry(Base):
     stress      = Column(Integer)
     sleep_hours = Column(Float)
     notes       = Column(Text, default="")
-    embedding   = Column(Vector(384), nullable=True)  # for semantic search
+    embedding   = Column(Vector(384), nullable=True) if VECTOR_AVAILABLE else Column(Text, nullable=True)  # for semantic search
     created_at  = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="entries")
@@ -38,7 +43,7 @@ class JournalEntry(Base):
     title      = Column(String, nullable=False)
     body       = Column(Text, default="")
     mood       = Column(String, default="neutral")
-    embedding  = Column(Vector(384), nullable=True)
+    embedding  = Column(Vector(384), nullable=True) if VECTOR_AVAILABLE else Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="journals")

@@ -6,7 +6,7 @@ from sqlalchemy import text
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, date
-import os, requests
+import os, requests, asyncio
 
 from database import engine, get_db, Base
 import models, auth
@@ -26,11 +26,27 @@ HF_TOKEN = os.getenv("HF_TOKEN", "")
 
 @app.on_event("startup")
 def startup():
-    # Enable pgvector extension then create tables
-    with engine.connect() as conn:
-        conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
-        conn.commit()
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            conn.commit()
+    except Exception:
+        pass  # pgvector not available, skip
     Base.metadata.create_all(bind=engine)
+    # Start keep-alive background task
+    asyncio.create_task(keep_alive())
+
+async def keep_alive():
+    """Ping self every 5 minutes to prevent HF Space from sleeping."""
+    space_url = os.getenv("SPACE_URL", "")
+    if not space_url:
+        return
+    while True:
+        await asyncio.sleep(300)  # 5 minutes
+        try:
+            requests.get(f"{space_url}/", timeout=10)
+        except:
+            pass
 
 # ── Schemas ────────────────────────────────────────────────
 

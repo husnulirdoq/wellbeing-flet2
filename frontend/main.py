@@ -3,7 +3,7 @@ import requests
 import os
 from datetime import datetime
 
-API_URL = os.getenv("API_URL", "http://backend:8000")
+API_URL = os.getenv("API_URL", "https://husnulirdoq-wellbeing-backend.hf.space")
 WEB_PORT = int(os.getenv("WEB_PORT", "0")) or None
 
 BG = "#F0F4FF"

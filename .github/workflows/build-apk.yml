@@ -64,6 +64,7 @@ jobs:
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           CI: true
+          API_URL: https://husnulirdoq-wellbeing-backend.hf.space
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
