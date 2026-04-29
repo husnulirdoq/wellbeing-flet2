@@ -163,7 +163,7 @@ def main(page: ft.Page):
                 controls=[
                     ft.Container(height=64),
                     ft.Row(alignment=ft.MainAxisAlignment.CENTER, controls=[
-                        ft.Image(src="/assets/logo.png", width=110, height=110),
+                        ft.Image(src="logo.png", width=160, height=160),
                     ]),
                     ft.Container(height=12),
                     ft.Text("WellBeing Tracker", size=22,
@@ -734,7 +734,7 @@ def main(page: ft.Page):
             ft.Column(expand=True, spacing=0, controls=[
                 ft.AppBar(
                     title=ft.Row(spacing=8, controls=[
-                        ft.Image(src="/assets/logo.png", width=28, height=28),
+                        ft.Image(src="logo.png", width=28, height=28),
                         ft.Text("WellBeing", size=16, weight=ft.FontWeight.BOLD, color=DARK),
                     ]),
                     bgcolor=WHITE,
@@ -771,7 +771,7 @@ def main(page: ft.Page):
             content=ft.Column(
                 horizontal_alignment=ft.CrossAxisAlignment.CENTER,
                 controls=[
-                    ft.Image(src="/assets/logo.png", width=140, height=140),
+                    ft.Image(src="logo.png", width=140, height=140),
                     ft.Container(height=16),
                     ft.Text("WellBeing Tracker", size=20,
                             weight=ft.FontWeight.BOLD, color=PRIMARY),
@@ -789,6 +789,6 @@ def main(page: ft.Page):
     threading.Thread(target=splash_then_login, daemon=True).start()
 
 if WEB_PORT:
-    ft.app(main, port=WEB_PORT)
+    ft.app(main, port=WEB_PORT, assets_dir="assets")
 else:
-    ft.app(main)
+    ft.app(main, assets_dir="assets")
