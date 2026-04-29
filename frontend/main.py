@@ -95,19 +95,18 @@ def main(page: ft.Page):
         mode    = {"reg": False}
 
         def do_login(e):
-            email = r_email.current.value or ""
-            pwd   = r_pass.current.value or ""
+            email = r_email.current.value or "" if r_email.current else ""
+            pwd   = r_pass.current.value or "" if r_pass.current else ""
+            def set_err(msg):
+                if r_err.current: r_err.current.value = msg; page.update()
             if not email or not pwd:
-                r_err.current.value = "Email dan password wajib diisi."
-                page.update(); return
-            r_err.current.value = "⏳ Logging in..."
-            page.update()
+                set_err("Email dan password wajib diisi."); return
+            set_err("⏳ Logging in...")
             try:
                 r = requests.post(f"{FB_SIGNIN}?key={FIREBASE_API_KEY}",
                     json={"email": email, "password": pwd, "returnSecureToken": True}, timeout=15)
                 if not r.ok:
-                    r_err.current.value = f"❌ {r.json().get('error',{}).get('message','Login gagal.')}"
-                    page.update(); return
+                    set_err(f"❌ {r.json().get('error',{}).get('message','Login gagal.')}"); return
                 tok = r.json()["idToken"]
                 r2 = requests.post(f"{API_URL}/auth/firebase",
                     json={"id_token": tok, "email": email}, timeout=20)
@@ -117,27 +116,24 @@ def main(page: ft.Page):
                     session["username"] = d["username"]
                     go_main()
                 else:
-                    r_err.current.value = "❌ Server error. Coba lagi."
-                    page.update()
+                    set_err("❌ Server error. Coba lagi.")
             except:
-                r_err.current.value = "❌ Tidak bisa terhubung."
-                page.update()
+                set_err("❌ Tidak bisa terhubung.")
 
         def do_register(e):
-            email = r_email.current.value or ""
-            pwd   = r_pass.current.value or ""
-            uname = r_uname.current.value or ""
+            email = r_email.current.value or "" if r_email.current else ""
+            pwd   = r_pass.current.value or "" if r_pass.current else ""
+            uname = r_uname.current.value or "" if r_uname.current else ""
+            def set_err(msg):
+                if r_err.current: r_err.current.value = msg; page.update()
             if not email or not pwd or not uname:
-                r_err.current.value = "Semua field wajib diisi."
-                page.update(); return
-            r_err.current.value = "⏳ Registering..."
-            page.update()
+                set_err("Semua field wajib diisi."); return
+            set_err("⏳ Registering...")
             try:
                 r = requests.post(f"{FB_SIGNUP}?key={FIREBASE_API_KEY}",
                     json={"email": email, "password": pwd, "returnSecureToken": True}, timeout=15)
                 if not r.ok:
-                    r_err.current.value = f"❌ {r.json().get('error',{}).get('message','Gagal.')}"
-                    page.update(); return
+                    set_err(f"❌ {r.json().get('error',{}).get('message','Gagal.')}"); return
                 tok = r.json()["idToken"]
                 r2 = requests.post(f"{API_URL}/auth/firebase",
                     json={"id_token": tok, "email": email, "username": uname}, timeout=20)
@@ -147,11 +143,9 @@ def main(page: ft.Page):
                     session["username"] = d["username"]
                     go_main()
                 else:
-                    r_err.current.value = "❌ Server error. Coba lagi."
-                    page.update()
+                    set_err("❌ Server error. Coba lagi.")
             except:
-                r_err.current.value = "❌ Tidak bisa terhubung."
-                page.update()
+                set_err("❌ Tidak bisa terhubung.")
 
         def toggle(e):
             mode["reg"] = not mode["reg"]
@@ -165,10 +159,12 @@ def main(page: ft.Page):
             padding=ft.Padding(28, 0, 28, 28),
             content=ft.Column(
                 scroll=ft.ScrollMode.AUTO,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
                 controls=[
                     ft.Container(height=64),
-                    ft.Image(src="/assets/logo.png", width=110, height=110),
+                    ft.Row(alignment=ft.MainAxisAlignment.CENTER, controls=[
+                        ft.Image(src="/assets/logo.png", width=110, height=110),
+                    ]),
                     ft.Container(height=12),
                     ft.Text("WellBeing Tracker", size=22,
                             weight=ft.FontWeight.BOLD, color=DARK,
@@ -202,12 +198,14 @@ def main(page: ft.Page):
                         ),
                     ),
                     ft.Container(height=8),
-                    ft.TextButton(
-                        content=ft.Text(ref=r_link,
-                                        value="Belum punya akun? Daftar",
-                                        color=PRIMARY),
-                        on_click=toggle,
-                    ),
+                    ft.Row(alignment=ft.MainAxisAlignment.CENTER, controls=[
+                        ft.TextButton(
+                            content=ft.Text(ref=r_link,
+                                            value="Belum punya akun? Daftar",
+                                            color=PRIMARY),
+                            on_click=toggle,
+                        ),
+                    ]),
                 ],
             ),
         )
@@ -221,70 +219,94 @@ def main(page: ft.Page):
 
         # Pages
         def pg_dashboard():
-            summary  = api_get("/entries/summary")
-            s        = (summary or {}).get("summary")
-            journals = api_get("/journal") or []
-            todos    = api_get("/todos") or []
-            done     = [t for t in todos if t.get("done")]
-            wellness = int(((s["avg_mood"]+s["avg_energy"]+(10-s["avg_stress"]))/30)*100) if s else 0
+            r_content = ft.Ref[ft.Column]()
 
-            def stat(icon, val, lbl, color):
-                return ft.Container(
-                    expand=True, bgcolor=WHITE, border_radius=14, padding=12,
-                    shadow=ft.BoxShadow(blur_radius=6, color="#12000000", offset=ft.Offset(0,2)),
-                    content=ft.Column(horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2, controls=[
-                        ft.Text(icon, size=22),
-                        ft.Text(str(val), size=20, weight=ft.FontWeight.BOLD, color=color),
-                        ft.Text(lbl, size=10, color=GRAY),
-                    ]),
+            def build_content(summary, journals, todos):
+                s        = (summary or {}).get("summary")
+                done     = [t for t in todos if t.get("done")]
+                wellness = int(((s["avg_mood"]+s["avg_energy"]+(10-s["avg_stress"]))/30)*100) if s else 0
+
+                def stat(icon, val, lbl, color):
+                    return ft.Container(
+                        expand=True, bgcolor=WHITE, border_radius=14, padding=12,
+                        shadow=ft.BoxShadow(blur_radius=6, color="#12000000", offset=ft.Offset(0,2)),
+                        content=ft.Column(horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2, controls=[
+                            ft.Text(icon, size=22),
+                            ft.Text(str(val), size=20, weight=ft.FontWeight.BOLD, color=color),
+                            ft.Text(lbl, size=10, color=GRAY),
+                        ]),
+                    )
+
+                acts = (
+                    [ft.Row(spacing=10, controls=[
+                        ft.Text(i, size=16),
+                        ft.Column(spacing=1, expand=True, controls=[
+                            ft.Text(t, size=13, color=DARK),
+                            ft.Text(tm, size=11, color=GRAY),
+                        ]),
+                    ]) for i,t,tm in
+                    [("📖",j["title"],j.get("created_at","")[:10]) for j in journals[:3]] +
+                    [("✅",t["title"],"done") for t in done[:2]]]
+                    or [ft.Text("No activity yet.", color=GRAY, size=13)]
                 )
 
-            acts = (
-                [ft.Row(spacing=10, controls=[
-                    ft.Text(i, size=16),
-                    ft.Column(spacing=1, expand=True, controls=[
-                        ft.Text(t, size=13, color=DARK),
-                        ft.Text(tm, size=11, color=GRAY),
-                    ]),
-                ]) for i,t,tm in
-                [("📖",j["title"],j.get("created_at","")[:10]) for j in journals[:3]] +
-                [("✅",t["title"],"done") for t in done[:2]]]
-                or [ft.Text("No activity yet.", color=GRAY, size=13)]
-            )
+                goals = [
+                    ("Journals",  min(len(journals)/10,1.0), PRIMARY),
+                    ("Tasks done",min(len(done)/10,1.0),     GREEN),
+                    ("Wellness",  wellness/100,               ORANGE),
+                ]
 
-            goals = [
-                ("Journals",  min(len(journals)/10,1.0), PRIMARY),
-                ("Tasks done",min(len(done)/10,1.0),     GREEN),
-                ("Wellness",  wellness/100,               ORANGE),
-            ]
+                if r_content.current:
+                    r_content.current.controls = [
+                        ft.Text(f"Hi, {session['username']}! 👋",
+                                size=18, weight=ft.FontWeight.BOLD, color=DARK),
+                        ft.Container(height=12),
+                        ft.Row(spacing=8, controls=[
+                            stat("📖", len(journals), "Journals", PRIMARY),
+                            stat("✅", len(done),     "Tasks",    GREEN),
+                            stat("💪", f"{wellness}%","Wellness", ORANGE),
+                            stat("📝", s["total_entries"] if s else 0, "Logs", RED),
+                        ]),
+                        ft.Container(height=12),
+                        card(ft.Column(spacing=10, controls=[
+                            ft.Text("Recent Activity", size=14, weight=ft.FontWeight.BOLD, color=DARK),
+                            *acts,
+                        ])),
+                        card(ft.Column(spacing=10, controls=[
+                            ft.Text("Today's Goals", size=14, weight=ft.FontWeight.BOLD, color=DARK),
+                            *[ft.Column(spacing=4, controls=[
+                                ft.Row(controls=[
+                                    ft.Text(l, size=13, color=DARK, expand=True),
+                                    ft.Text(f"{int(p*100)}%", size=12, color=c),
+                                ]),
+                                ft.ProgressBar(value=p, color=c, bgcolor="#E5E7EB", height=6),
+                            ]) for l,p,c in goals],
+                        ])),
+                    ]
+                    page.update()
+
+            def load():
+                import threading
+                summary  = api_get("/entries/summary")
+                journals = api_get("/journal") or []
+                todos    = api_get("/todos") or []
+                build_content(summary, journals, todos)
+
+            import threading
+            threading.Thread(target=load, daemon=True).start()
 
             return ft.Container(expand=True, padding=16,
-                content=ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
-                    ft.Text(f"Hi, {session['username']}! 👋",
-                            size=18, weight=ft.FontWeight.BOLD, color=DARK),
-                    ft.Container(height=12),
-                    ft.Row(spacing=8, controls=[
-                        stat("📖", len(journals), "Journals", PRIMARY),
-                        stat("✅", len(done),     "Tasks",    GREEN),
-                        stat("💪", f"{wellness}%","Wellness", ORANGE),
-                        stat("📝", s["total_entries"] if s else 0, "Logs", RED),
+                content=ft.Column(ref=r_content, scroll=ft.ScrollMode.AUTO, expand=True,
+                    controls=[
+                        ft.Text(f"Hi, {session['username']}! 👋",
+                                size=18, weight=ft.FontWeight.BOLD, color=DARK),
+                        ft.Container(height=20),
+                        ft.Row(alignment=ft.MainAxisAlignment.CENTER, controls=[
+                            ft.ProgressRing(width=32, height=32, color=PRIMARY),
+                            ft.Container(width=12),
+                            ft.Text("Loading...", color=GRAY, size=13),
+                        ]),
                     ]),
-                    ft.Container(height=12),
-                    card(ft.Column(spacing=10, controls=[
-                        ft.Text("Recent Activity", size=14, weight=ft.FontWeight.BOLD, color=DARK),
-                        *acts,
-                    ])),
-                    card(ft.Column(spacing=10, controls=[
-                        ft.Text("Today's Goals", size=14, weight=ft.FontWeight.BOLD, color=DARK),
-                        *[ft.Column(spacing=4, controls=[
-                            ft.Row(controls=[
-                                ft.Text(l, size=13, color=DARK, expand=True),
-                                ft.Text(f"{int(p*100)}%", size=12, color=c),
-                            ]),
-                            ft.ProgressBar(value=p, color=c, bgcolor="#E5E7EB", height=6),
-                        ]) for l,p,c in goals],
-                    ])),
-                ]),
             )
 
         def pg_journal():
@@ -294,38 +316,64 @@ def main(page: ft.Page):
             r_body  = ft.Ref[ft.TextField]()
             r_mood  = ft.Ref[ft.Dropdown]()
             moods   = {"happy":"😊","neutral":"😐","sad":"😔","excited":"🤩"}
+            local_entries = []
 
-            def load():
-                data = api_get("/journal") or []
+            def render():
                 if col.current is None: return
-                col.current.controls = [entry(e) for e in data] or \
+                col.current.controls = [entry(e) for e in local_entries] or \
                     [ft.Text("No entries yet.", color=GRAY)]
                 page.update()
 
+            def load():
+                data = api_get("/journal") or []
+                local_entries.clear()
+                local_entries.extend(data)
+                render()
+
             def entry(e):
+                is_temp = e.get("_temp", False)
                 return card(ft.Column(spacing=6, controls=[
                     ft.Row(spacing=8, controls=[
                         ft.Text(moods.get(e.get("mood","neutral"),"😊"), size=20),
                         ft.Column(spacing=1, expand=True, controls=[
-                            ft.Text(e["title"], size=14, weight=ft.FontWeight.BOLD, color=DARK),
-                            ft.Text(e.get("created_at","")[:10], size=11, color=GRAY),
+                            ft.Text(e["title"], size=14, weight=ft.FontWeight.BOLD,
+                                    color=GRAY if is_temp else DARK),
+                            ft.Text("Saving..." if is_temp else e.get("created_at","")[:10],
+                                    size=11, color=GRAY),
                         ]),
                         ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=RED,
-                            on_click=lambda ev, eid=e["id"]: (api_delete(f"/journal/{eid}"), load())),
+                            on_click=lambda ev, eid=e.get("id"): (
+                                api_delete(f"/journal/{eid}") if eid else None,
+                                local_entries.remove(e) if e in local_entries else None,
+                                render(),
+                            ) if not is_temp else None),
                     ]),
                     ft.Text(e.get("body",""), size=13, color=GRAY),
                 ]))
 
             def save(e):
-                api_post("/journal", {
-                    "title": r_title.current.value or "Untitled",
-                    "body":  r_body.current.value or "",
-                    "mood":  r_mood.current.value or "neutral",
-                })
+                title = r_title.current.value or "Untitled"
+                body  = r_body.current.value or ""
+                mood  = r_mood.current.value or "neutral"
+                # Close dialog immediately
                 dlg.current.open = False
                 r_title.current.value = ""
                 r_body.current.value  = ""
-                load()
+                # Optimistic — add temp entry instantly
+                temp = {"title": title, "body": body, "mood": mood,
+                        "created_at": datetime.now().isoformat(), "_temp": True, "id": None}
+                local_entries.insert(0, temp)
+                render()
+                # Send to API in background
+                import threading
+                def do_save():
+                    result = api_post("/journal", {"title": title, "body": body, "mood": mood})
+                    if temp in local_entries:
+                        local_entries.remove(temp)
+                    if result:
+                        local_entries.insert(0, result)
+                    render()
+                threading.Thread(target=do_save, daemon=True).start()
 
             dialog = ft.AlertDialog(
                 ref=dlg, title=ft.Text("New Entry"),
@@ -347,7 +395,8 @@ def main(page: ft.Page):
             page.overlay.append(dialog)
 
             entries_col = ft.Column(ref=col, controls=[ft.Text("Loading...", color=GRAY)])
-            load()
+            import threading
+            threading.Thread(target=load, daemon=True).start()
 
             return ft.Container(expand=True, padding=16,
                 content=ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
@@ -380,31 +429,64 @@ def main(page: ft.Page):
                 page.update()
 
             def task_row(t):
+                is_temp = t.get("_temp", False)
                 return ft.Row(spacing=6, controls=[
-                    ft.Checkbox(on_change=lambda e, tid=t["id"]: (api_patch(f"/todos/{tid}/done"), load())),
+                    ft.Checkbox(on_change=lambda e, tid=t.get("id"): (
+                        api_patch(f"/todos/{tid}/done") if tid else None,
+                        load()) if not is_temp else None),
                     ft.Column(spacing=2, expand=True, controls=[
-                        ft.Text(t["title"], size=13, color=DARK),
-                        ft.Container(content=ft.Text(t.get("category",""), size=10, color=GRAY),
-                                     bgcolor="#F3F4F6", border_radius=4, padding=ft.Padding(6,2,6,2)),
+                        ft.Text(t["title"], size=13, color=GRAY if is_temp else DARK),
+                        ft.Container(content=ft.Text(
+                            "Saving..." if is_temp else t.get("category",""),
+                            size=10, color=GRAY),
+                            bgcolor="#F3F4F6", border_radius=4, padding=ft.Padding(6,2,6,2)),
                     ]),
                     ft.Icon(ft.Icons.FLAG, color=pcolors.get(t.get("priority","medium"),ORANGE), size=16),
                     ft.IconButton(ft.Icons.DELETE_OUTLINE, icon_color=GRAY,
-                        on_click=lambda e, tid=t["id"]: (api_delete(f"/todos/{tid}"), load())),
+                        on_click=lambda e, tid=t.get("id"): (
+                            api_delete(f"/todos/{tid}") if tid else None,
+                            load()) if not is_temp else None),
                 ])
+
+            local_tasks = []
+
+            def render_tasks():
+                if col.current is None: return
+                col.current.controls = [task_row(t) for t in local_tasks if not t.get("done")] or \
+                    [ft.Text("No tasks yet.", color=GRAY)]
+                page.update()
+
+            def load():
+                data = api_get("/todos") or []
+                local_tasks.clear()
+                local_tasks.extend(data)
+                render_tasks()
 
             def add(e):
                 title = r_input.current.value or ""
                 if not title.strip(): return
-                api_post("/todos", {
-                    "title":    title,
-                    "category": r_cat.current.value or "Wellness",
-                    "priority": r_prio.current.value or "medium",
-                })
+                cat  = r_cat.current.value or "Wellness"
+                prio = r_prio.current.value or "medium"
                 r_input.current.value = ""
-                load()
+                # Optimistic
+                temp = {"title": title, "category": cat, "priority": prio,
+                        "done": False, "_temp": True, "id": None}
+                local_tasks.insert(0, temp)
+                render_tasks()
+                # Background save
+                import threading
+                def do_add():
+                    result = api_post("/todos", {"title": title, "category": cat, "priority": prio})
+                    if temp in local_tasks:
+                        local_tasks.remove(temp)
+                    if result:
+                        local_tasks.insert(0, result)
+                    render_tasks()
+                threading.Thread(target=do_add, daemon=True).start()
 
             tasks_col = ft.Column(ref=col, spacing=10, controls=[ft.Text("Loading...", color=GRAY)])
-            load()
+            import threading
+            threading.Thread(target=load, daemon=True).start()
 
             return ft.Container(expand=True, padding=16,
                 content=ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
@@ -488,7 +570,8 @@ def main(page: ft.Page):
                 ]))
 
             cards = [make_card(k) for k in fields]
-            load()
+            import threading
+            threading.Thread(target=load, daemon=True).start()
 
             return ft.Container(expand=True, padding=16,
                 content=ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
@@ -592,7 +675,7 @@ def main(page: ft.Page):
                     # AI Chat
                     ft.Text("AI Health Assistant", size=16, weight=ft.FontWeight.BOLD, color=DARK),
                     ft.Container(height=8),
-                    ft.Container(height=220, bgcolor=BG, border_radius=12, padding=10,
+                    ft.Container(height=280, bgcolor=BG, border_radius=12, padding=10,
                         content=ft.Column(ref=col, spacing=8, scroll=ft.ScrollMode.AUTO,
                                           controls=[bubble(m) for m in msgs])),
                     ft.Row(spacing=8, controls=[
@@ -602,27 +685,16 @@ def main(page: ft.Page):
                             style=ft.ButtonStyle(bgcolor=PRIMARY, shape=ft.RoundedRectangleBorder(radius=10))),
                     ]),
                     ft.Divider(height=24),
-                    # Shop
-                    ft.Row(controls=[
-                        ft.Text("Wellness Shop", size=16, weight=ft.FontWeight.BOLD, color=DARK, expand=True),
-                        ft.Button(content=ft.Text(ref=r_cart, value="🛒 0", color=WHITE, size=13),
-                            on_click=checkout,
-                            style=ft.ButtonStyle(bgcolor=PRIMARY, shape=ft.RoundedRectangleBorder(radius=8))),
-                    ]),
-                    ft.Container(height=8),
-                    *[card(ft.Row(spacing=12, vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
-                        ft.Text(p["emoji"], size=28),
-                        ft.Column(spacing=2, expand=True, controls=[
-                            ft.Text(p["name"], size=13, weight=ft.FontWeight.BOLD, color=DARK),
-                            ft.Text(p["desc"], size=11, color=GRAY),
-                            ft.Text(f"${p['price']}", size=13, color=PRIMARY, weight=ft.FontWeight.BOLD),
+                    # Shop coming soon
+                    card(ft.Column(spacing=8, controls=[
+                        ft.Row(spacing=10, controls=[
+                            ft.Text("🛍️", size=28),
+                            ft.Column(spacing=2, expand=True, controls=[
+                                ft.Text("Wellness Shop", size=15, weight=ft.FontWeight.BOLD, color=DARK),
+                                ft.Text("Coming soon — payment gateway in progress.", size=12, color=GRAY),
+                            ]),
                         ]),
-                        ft.Button(content=ft.Text("Add", color=WHITE, size=12),
-                            on_click=lambda e, prod=p: add_cart(e, prod),
-                            style=ft.ButtonStyle(bgcolor=PRIMARY, shape=ft.RoundedRectangleBorder(radius=8),
-                                                 padding=ft.Padding(10,6,10,6))),
-                    ])) for p in products],
-                    ft.Divider(height=24),
+                    ])),
                     ft.Container(height=16),
                 ]),
             )
