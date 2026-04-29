@@ -56,7 +56,18 @@ jobs:
       - name: Install frontend dependencies
         run: pip install -r frontend/requirements.txt
 
-      - name: Build APK
+      - name: Build AAB (Play Store)
+        working-directory: frontend
+        timeout-minutes: 30
+        run: |
+          echo "y" | flet build aab
+        env:
+          ANDROID_HOME: ${{ env.ANDROID_HOME }}
+          CI: true
+          API_URL: https://husnulirdoq-wellbeing-backend.hf.space
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
+
+      - name: Build APK (Direct Install)
         working-directory: frontend
         timeout-minutes: 30
         run: |
@@ -74,13 +85,22 @@ jobs:
           path: frontend/build/apk/*.apk
           retention-days: 30
 
+      - name: Upload AAB artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wellbeing-aab
+          path: frontend/build/aab/*.aab
+          retention-days: 30
+
       - name: Create Release
         if: github.ref == 'refs/heads/main'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: build-${{ github.run_number }}
           name: "WellBeing APK - Build #${{ github.run_number }}"
-          files: frontend/build/apk/*.apk
+          files: |
+            frontend/build/apk/*.apk
+            frontend/build/aab/*.aab
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
