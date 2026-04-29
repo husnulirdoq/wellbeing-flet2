@@ -22,6 +22,7 @@ jobs:
           cp backend/database.py hf-backend/
           cp backend/models.py hf-backend/
           cp backend/auth.py hf-backend/
+          cp backend/firebase_auth.py hf-backend/
           cp backend/garmin_service.py hf-backend/
           cp backend/payment_service.py hf-backend/
           cp backend/requirements.txt hf-backend/
