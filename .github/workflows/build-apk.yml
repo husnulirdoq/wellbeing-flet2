@@ -65,6 +65,7 @@ jobs:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           CI: true
           API_URL: https://husnulirdoq-wellbeing-backend.hf.space
+          FIREBASE_API_KEY: ${{ secrets.FIREBASE_API_KEY }}
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4

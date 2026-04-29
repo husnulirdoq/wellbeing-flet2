@@ -30,6 +30,7 @@ services:
       - GARMIN_PASSWORD=${GARMIN_PASSWORD}
       - MIDTRANS_SERVER_KEY=${MIDTRANS_SERVER_KEY}
       - MIDTRANS_IS_PRODUCTION=false
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
     depends_on:
       db:
         condition: service_healthy
@@ -43,6 +44,10 @@ services:
       - ./frontend:/app
     depends_on:
       - backend
+    environment:
+      - API_URL=http://backend:8000
+      - WEB_PORT=8080
+      - FIREBASE_API_KEY=${FIREBASE_API_KEY}
     environment:
       - API_URL=http://backend:8000
       - WEB_PORT=8080

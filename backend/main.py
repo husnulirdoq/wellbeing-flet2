@@ -12,6 +12,7 @@ from database import engine, get_db, Base
 import models, auth
 import garmin_service
 import payment_service
+import firebase_auth as fb
 
 app = FastAPI(title="WellBeing Tracker API")
 
@@ -54,6 +55,11 @@ class RegisterSchema(BaseModel):
     email: str
     username: str
     password: str
+
+class FirebaseLoginSchema(BaseModel):
+    id_token: str
+    email: str
+    username: Optional[str] = None
 
 class WellbeingSchema(BaseModel):
     mood: int
@@ -120,6 +126,31 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 @app.get("/auth/me")
 def me(current_user: models.User = Depends(auth.get_current_user)):
     return {"id": current_user.id, "email": current_user.email, "username": current_user.username}
+
+@app.post("/auth/firebase")
+def firebase_login(data: FirebaseLoginSchema, db: Session = Depends(get_db)):
+    """Login/register via Firebase ID token."""
+    user_info = fb.verify_firebase_token(data.id_token)
+    if not user_info:
+        raise HTTPException(status_code=401, detail="Invalid Firebase token")
+
+    email = user_info.get("email") or data.email
+    user = db.query(models.User).filter(models.User.email == email).first()
+
+    if not user:
+        # Auto-register on first login
+        username = data.username or email.split("@")[0]
+        user = models.User(
+            email=email,
+            username=username,
+            hashed_pw=auth.hash_password(os.urandom(32).hex()),  # random pw, not used
+        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+
+    token = auth.create_token({"sub": user.id})
+    return {"access_token": token, "token_type": "bearer", "username": user.username}
 
 # ── Wellbeing Entries ──────────────────────────────────────
 

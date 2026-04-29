@@ -4,6 +4,9 @@ import os
 from datetime import datetime
 
 API_URL = os.getenv("API_URL", "https://husnulirdoq-wellbeing-backend.hf.space")
+FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyCTJ-9XV1DUQKFHPSRs5HYPLg8VW6DfoUM")
+FIREBASE_SIGN_IN_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
+FIREBASE_SIGN_UP_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
 WEB_PORT = int(os.getenv("WEB_PORT", "0")) or None
 
 BG = "#F0F4FF"
@@ -140,31 +143,36 @@ def main(page: ft.Page):
             if not email or not pwd:
                 err_ref.current.value = "Email dan password wajib diisi."
                 page.update(); return
-            err_ref.current.value = "⏳ Connecting..."
+            err_ref.current.value = "⏳ Logging in..."
             page.update()
             try:
-                for attempt in range(3):
-                    try:
-                        r = requests.post(f"{API_URL}/auth/login",
-                                          data={"username": email, "password": pwd}, timeout=20)
-                        break
-                    except Exception:
-                        if attempt < 2:
-                            import time; time.sleep(3)
-                            err_ref.current.value = f"⏳ Retrying ({attempt+2}/3)..."
-                            page.update()
-                        else:
-                            raise
-                if r.status_code == 200 and r.text.strip():
-                    data = r.json()
+                # Step 1: Firebase auth
+                r = requests.post(
+                    f"{FIREBASE_SIGN_IN_URL}?key={FIREBASE_API_KEY}",
+                    json={"email": email, "password": pwd, "returnSecureToken": True},
+                    timeout=15,
+                )
+                if r.status_code != 200:
+                    err_msg = r.json().get("error", {}).get("message", "Login gagal.")
+                    err_ref.current.value = f"❌ {err_msg}"
+                    page.update(); return
+
+                id_token = r.json()["idToken"]
+
+                # Step 2: Exchange Firebase token for app token
+                r2 = requests.post(f"{API_URL}/auth/firebase",
+                                   json={"id_token": id_token, "email": email},
+                                   timeout=20)
+                if r2.status_code == 200 and r2.text.strip():
+                    data = r2.json()
                     session["token"]    = data["access_token"]
                     session["username"] = data["username"]
                     navigate("Dashboard")
                 else:
-                    err_ref.current.value = "Email atau password salah."
+                    err_ref.current.value = "❌ Server error. Coba lagi."
                     page.update()
             except Exception as ex:
-                err_ref.current.value = "❌ Server tidak bisa diakses. Coba lagi."
+                err_ref.current.value = "❌ Tidak bisa terhubung. Coba lagi."
                 page.update()
 
         def do_register(e):
@@ -177,19 +185,33 @@ def main(page: ft.Page):
             err_ref.current.value = "⏳ Registering..."
             page.update()
             try:
-                r = requests.post(f"{API_URL}/auth/register",
-                                  json={"email": email, "password": pwd, "username": uname}, timeout=20)
-                if r.status_code == 200 and r.text.strip():
-                    data = r.json()
+                # Step 1: Firebase register
+                r = requests.post(
+                    f"{FIREBASE_SIGN_UP_URL}?key={FIREBASE_API_KEY}",
+                    json={"email": email, "password": pwd, "returnSecureToken": True},
+                    timeout=15,
+                )
+                if r.status_code != 200:
+                    err_msg = r.json().get("error", {}).get("message", "Registrasi gagal.")
+                    err_ref.current.value = f"❌ {err_msg}"
+                    page.update(); return
+
+                id_token = r.json()["idToken"]
+
+                # Step 2: Register in app DB
+                r2 = requests.post(f"{API_URL}/auth/firebase",
+                                   json={"id_token": id_token, "email": email, "username": uname},
+                                   timeout=20)
+                if r2.status_code == 200 and r2.text.strip():
+                    data = r2.json()
                     session["token"]    = data["access_token"]
                     session["username"] = data["username"]
                     navigate("Dashboard")
                 else:
-                    detail = r.json().get("detail", "Registrasi gagal.") if r.text.strip() else "Registrasi gagal."
-                    err_ref.current.value = detail
+                    err_ref.current.value = "❌ Server error. Coba lagi."
                     page.update()
             except Exception as ex:
-                err_ref.current.value = "❌ Server tidak bisa diakses. Coba lagi."
+                err_ref.current.value = "❌ Tidak bisa terhubung. Coba lagi."
                 page.update()
 
         def toggle_mode(e):
