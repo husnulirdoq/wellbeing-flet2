@@ -1,21 +1,33 @@
-from garminconnect import Garmin
 from datetime import date
 import os
 
 GARMIN_EMAIL    = os.getenv("GARMIN_EMAIL", "")
 GARMIN_PASSWORD = os.getenv("GARMIN_PASSWORD", "")
 
+try:
+    from garminconnect import Garmin
+    GARMIN_AVAILABLE = True
+except ImportError:
+    GARMIN_AVAILABLE = False
+
 _client = None
 
-def get_client() -> Garmin:
+def get_client():
     global _client
+    if not GARMIN_AVAILABLE:
+        return None
     if _client is None:
+        from garminconnect import Garmin
         _client = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
         _client.login()
     return _client
 
 def get_today_stats(target_date: str = None) -> dict:
     """Fetch today's stats from Garmin Connect."""
+    if not GARMIN_AVAILABLE:
+        return {"error": "Garmin not available on this server", "source": "garmin"}
+    if not GARMIN_EMAIL or not GARMIN_PASSWORD:
+        return {"error": "Garmin credentials not configured", "source": "garmin"}
     d = target_date or str(date.today())
     try:
         client = get_client()
