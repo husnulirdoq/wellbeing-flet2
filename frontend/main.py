@@ -28,36 +28,45 @@ def main(page: ft.Page):
     def api_headers():
         return {"Authorization": f"Bearer {session['token']}"}
 
-    def api_get(path):
-        try:
-            r = requests.get(f"{API_URL}{path}", headers=api_headers(), timeout=10)
-            if r.status_code == 200 and r.text.strip():
-                return r.json()
-            return None
-        except:
-            return None
+    def api_get(path, retries=2):
+        for attempt in range(retries + 1):
+            try:
+                r = requests.get(f"{API_URL}{path}", headers=api_headers(), timeout=15)
+                if r.status_code == 200 and r.text.strip():
+                    return r.json()
+                return None
+            except Exception:
+                if attempt < retries:
+                    import time; time.sleep(2)
+        return None
 
-    def api_post(path, data):
-        try:
-            r = requests.post(f"{API_URL}{path}", json=data, headers=api_headers(), timeout=10)
-            if r.status_code in (200, 201) and r.text.strip():
-                return r.json()
-            return None
-        except:
-            return None
+    def api_post(path, data, retries=2):
+        for attempt in range(retries + 1):
+            try:
+                r = requests.post(f"{API_URL}{path}", json=data, headers=api_headers(), timeout=15)
+                if r.status_code in (200, 201) and r.text.strip():
+                    return r.json()
+                return None
+            except Exception:
+                if attempt < retries:
+                    import time; time.sleep(2)
+        return None
 
-    def api_patch(path):
-        try:
-            r = requests.patch(f"{API_URL}{path}", headers=api_headers(), timeout=10)
-            if r.status_code == 200 and r.text.strip():
-                return r.json()
-            return None
-        except:
-            return None
+    def api_patch(path, retries=2):
+        for attempt in range(retries + 1):
+            try:
+                r = requests.patch(f"{API_URL}{path}", headers=api_headers(), timeout=15)
+                if r.status_code == 200 and r.text.strip():
+                    return r.json()
+                return None
+            except Exception:
+                if attempt < retries:
+                    import time; time.sleep(2)
+        return None
 
     def api_delete(path):
         try:
-            r = requests.delete(f"{API_URL}{path}", headers=api_headers(), timeout=10)
+            r = requests.delete(f"{API_URL}{path}", headers=api_headers(), timeout=15)
             return r.status_code == 200
         except:
             return False
@@ -131,9 +140,21 @@ def main(page: ft.Page):
             if not email or not pwd:
                 err_ref.current.value = "Email dan password wajib diisi."
                 page.update(); return
+            err_ref.current.value = "⏳ Connecting..."
+            page.update()
             try:
-                r = requests.post(f"{API_URL}/auth/login",
-                                  data={"username": email, "password": pwd}, timeout=10)
+                for attempt in range(3):
+                    try:
+                        r = requests.post(f"{API_URL}/auth/login",
+                                          data={"username": email, "password": pwd}, timeout=20)
+                        break
+                    except Exception:
+                        if attempt < 2:
+                            import time; time.sleep(3)
+                            err_ref.current.value = f"⏳ Retrying ({attempt+2}/3)..."
+                            page.update()
+                        else:
+                            raise
                 if r.status_code == 200 and r.text.strip():
                     data = r.json()
                     session["token"]    = data["access_token"]
@@ -143,7 +164,7 @@ def main(page: ft.Page):
                     err_ref.current.value = "Email atau password salah."
                     page.update()
             except Exception as ex:
-                err_ref.current.value = f"Error: {ex}"
+                err_ref.current.value = "❌ Server tidak bisa diakses. Coba lagi."
                 page.update()
 
         def do_register(e):
@@ -153,9 +174,11 @@ def main(page: ft.Page):
             if not email or not pwd or not uname:
                 err_ref.current.value = "Semua field wajib diisi."
                 page.update(); return
+            err_ref.current.value = "⏳ Registering..."
+            page.update()
             try:
                 r = requests.post(f"{API_URL}/auth/register",
-                                  json={"email": email, "password": pwd, "username": uname}, timeout=10)
+                                  json={"email": email, "password": pwd, "username": uname}, timeout=20)
                 if r.status_code == 200 and r.text.strip():
                     data = r.json()
                     session["token"]    = data["access_token"]
@@ -166,7 +189,7 @@ def main(page: ft.Page):
                     err_ref.current.value = detail
                     page.update()
             except Exception as ex:
-                err_ref.current.value = f"Error: {ex}"
+                err_ref.current.value = "❌ Server tidak bisa diakses. Coba lagi."
                 page.update()
 
         def toggle_mode(e):
