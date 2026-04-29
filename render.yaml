@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: wellbeing-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: FIREBASE_API_KEY
+        sync: false
+      - key: HF_TOKEN
+        sync: false
+      - key: GARMIN_EMAIL
+        sync: false
+      - key: GARMIN_PASSWORD
+        sync: false
+      - key: MIDTRANS_SERVER_KEY
+        sync: false
+      - key: MIDTRANS_IS_PRODUCTION
+        value: false
+      - key: SPACE_URL
+        sync: false
