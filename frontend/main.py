@@ -286,14 +286,12 @@ def main(page: ft.Page):
                     page.update()
 
             def load():
-                import threading
                 summary  = api_get("/entries/summary")
                 journals = api_get("/journal") or []
                 todos    = api_get("/todos") or []
                 build_content(summary, journals, todos)
 
-            import threading
-            threading.Thread(target=load, daemon=True).start()
+            page.run_thread(load)
 
             return ft.Container(expand=True, padding=16,
                 content=ft.Column(ref=r_content, scroll=ft.ScrollMode.AUTO, expand=True,
@@ -395,8 +393,7 @@ def main(page: ft.Page):
             page.overlay.append(dialog)
 
             entries_col = ft.Column(ref=col, controls=[ft.Text("Loading...", color=GRAY)])
-            import threading
-            threading.Thread(target=load, daemon=True).start()
+            page.run_thread(load)
 
             return ft.Container(expand=True, padding=16,
                 content=ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
@@ -485,8 +482,7 @@ def main(page: ft.Page):
                 threading.Thread(target=do_add, daemon=True).start()
 
             tasks_col = ft.Column(ref=col, spacing=10, controls=[ft.Text("Loading...", color=GRAY)])
-            import threading
-            threading.Thread(target=load, daemon=True).start()
+            page.run_thread(load)
 
             return ft.Container(expand=True, padding=16,
                 content=ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
@@ -570,8 +566,7 @@ def main(page: ft.Page):
                 ]))
 
             cards = [make_card(k) for k in fields]
-            import threading
-            threading.Thread(target=load, daemon=True).start()
+            page.run_thread(load)
 
             return ft.Container(expand=True, padding=16,
                 content=ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
@@ -792,3 +787,5 @@ if WEB_PORT:
     ft.app(main, port=WEB_PORT, assets_dir="assets")
 else:
     ft.app(main, assets_dir="assets")
+
+
