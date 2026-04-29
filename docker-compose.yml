@@ -23,6 +23,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - HF_TOKEN=${HF_TOKEN}
       - DATABASE_URL=postgresql://wellbeing:wellbeing123@db:5432/wellbeing
