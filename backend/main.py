@@ -298,12 +298,15 @@ def get_tracking_today(db: Session = Depends(get_db),
 def analyze(data: AnalyzeSchema):
     if not HF_TOKEN:
         return {"analysis": [[{"label": "neutral", "score": 1.0}]]}
-    url = "https://api-inference.huggingface.co/models/j-hartmann/emotion-english-distilroberta-base"
-    resp = requests.post(url, headers={"Authorization": f"Bearer {HF_TOKEN}"},
-                         json={"inputs": data.text}, timeout=15)
-    if resp.status_code != 200:
+    try:
+        url = "https://api-inference.huggingface.co/models/j-hartmann/emotion-english-distilroberta-base"
+        resp = requests.post(url, headers={"Authorization": f"Bearer {HF_TOKEN}"},
+                             json={"inputs": data.text}, timeout=15)
+        if resp.status_code != 200:
+            return {"analysis": [[{"label": "neutral", "score": 1.0}]]}
+        return {"analysis": resp.json()}
+    except:
         return {"analysis": [[{"label": "neutral", "score": 1.0}]]}
-    return {"analysis": resp.json()}
 
 @app.get("/")
 def root():
