@@ -60,13 +60,7 @@ jobs:
         working-directory: frontend
         timeout-minutes: 30
         run: |
-          echo "y" | flet build apk \
-            --project "WellBeing Tracker" \
-            --org com.wellbeing.tracker \
-            --assets assets \
-            --icon assets/icon/icon.png \
-            --splash-color "#FFFFFF" \
-            --splash-dark-color "#FFFFFF"
+          echo "y" | flet build apk
         env:
           ANDROID_HOME: ${{ env.ANDROID_HOME }}
           CI: true
