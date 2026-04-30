@@ -356,9 +356,11 @@ def main(page: ft.Page):
 
             def render():
                 if col.current is None: return
-                col.current.controls = [entry(e) for e in local_entries] or \
-                    [ft.Text("No entries yet.", color=GRAY)]
-                page.update()
+                try:
+                    col.current.controls = [entry(e) for e in local_entries] or \
+                        [ft.Text("No entries yet.", color=GRAY)]
+                    safe_update()
+                except: pass
 
             def load():
                 data = api_get("/journal") or []
@@ -413,20 +415,26 @@ def main(page: ft.Page):
 
             dialog = ft.AlertDialog(
                 ref=dlg, title=ft.Text("New Entry"),
-                content=ft.Column(tight=True, width=300, spacing=10, controls=[
-                    ft.Dropdown(ref=r_mood, label="Mood", value="neutral",
-                        options=[ft.dropdown.Option(k,v) for k,v in moods.items()]),
-                    ft.TextField(ref=r_title, label="Title"),
-                    ft.TextField(ref=r_body, label="How was your day?",
-                                 multiline=True, min_lines=3),
-                ]),
-                actions=[
-                    ft.TextButton(content=ft.Text("Cancel", color=GRAY),
-                        on_click=lambda e: setattr(dlg.current,"open",False) or page.update()),
-                    ft.Button(content=ft.Text("Save", color=WHITE), on_click=save,
-                        style=ft.ButtonStyle(bgcolor=PRIMARY,
-                                             shape=ft.RoundedRectangleBorder(radius=8))),
-                ],
+                content=ft.Container(
+                    width=300,
+                    content=ft.Column(spacing=10, scroll=ft.ScrollMode.AUTO, controls=[
+                        ft.Dropdown(ref=r_mood, label="Mood", value="neutral",
+                            options=[ft.dropdown.Option(k,v) for k,v in moods.items()]),
+                        ft.TextField(ref=r_title, label="Title"),
+                        ft.TextField(ref=r_body, label="How was your day?",
+                                     multiline=True, min_lines=3, max_lines=6,
+                                     shift_enter=True),
+                        ft.Row(spacing=8, controls=[
+                            ft.TextButton(content=ft.Text("Cancel", color=GRAY),
+                                on_click=lambda e: setattr(dlg.current,"open",False) or safe_update()),
+                            ft.Button(content=ft.Text("Save", color=WHITE), on_click=save,
+                                expand=True,
+                                style=ft.ButtonStyle(bgcolor=PRIMARY,
+                                                     shape=ft.RoundedRectangleBorder(radius=8))),
+                        ]),
+                    ]),
+                ),
+                actions_padding=ft.Padding(0,0,0,0),
             )
             page.overlay.append(dialog)
 
@@ -801,31 +809,8 @@ def main(page: ft.Page):
         )
 
     # ── Splash ─────────────────────────────────────────────
-    import threading, time
-
-    def splash_then_login():
-        splash = ft.Container(
-            expand=True, bgcolor=WHITE,
-            alignment=ft.Alignment(0, 0),
-            content=ft.Column(
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                controls=[
-                    ft.Image(src="logo.png", width=140, height=140),
-                    ft.Container(height=16),
-                    ft.Text("WellBeing Tracker", size=20,
-                            weight=ft.FontWeight.BOLD, color=PRIMARY),
-                    ft.Container(height=12),
-                    ft.ProgressRing(width=32, height=32, color=PRIMARY),
-                ],
-            ),
-        )
-        page.add(splash)
-        page.update()
-        time.sleep(2)
-        page.clean()
-        page.add(build_login())
-
-    threading.Thread(target=splash_then_login, daemon=True).start()
+    # Go straight to login — native splash screen handles the intro
+    page.add(build_login())
 
 if WEB_PORT:
     ft.app(main, port=WEB_PORT, assets_dir="assets")
