@@ -611,7 +611,13 @@ def main(page: ft.Page):
                     ft.Row(controls=[
                         ft.Text("Mind & Body", size=18, weight=ft.FontWeight.BOLD, color=DARK, expand=True),
                         ft.Button(content=ft.Text("🔄 Garmin", color=WHITE, size=12),
-                            on_click=lambda e: (api_post("/garmin/sync",{}) and load()),
+                            on_click=lambda e: (
+                                setattr(page, 'snack_bar', ft.SnackBar(
+                                    content=ft.Text("Garmin sync tidak tersedia dari server. Gunakan input manual.", color=WHITE),
+                                    bgcolor=ORANGE)) or
+                                setattr(page.snack_bar, 'open', True) or
+                                safe_update()
+                            ),
                             style=ft.ButtonStyle(bgcolor="#111827", shape=ft.RoundedRectangleBorder(radius=8),
                                                  padding=ft.Padding(10,6,10,6))),
                         ft.Container(width=6),
