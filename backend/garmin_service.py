@@ -1,64 +1,57 @@
-from datetime import date
 import os
+from datetime import date
 
 GARMIN_EMAIL    = os.getenv("GARMIN_EMAIL", "")
 GARMIN_PASSWORD = os.getenv("GARMIN_PASSWORD", "")
-
-try:
-    from garminconnect import Garmin
-    GARMIN_AVAILABLE = True
-except ImportError:
-    GARMIN_AVAILABLE = False
 
 _client = None
 
 def get_client():
     global _client
-    if not GARMIN_AVAILABLE:
-        return None
-    if _client is None:
+    if _client is not None:
+        return _client
+    try:
         from garminconnect import Garmin
-        _client = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
-        _client.login()
-    return _client
+        client = Garmin(GARMIN_EMAIL, GARMIN_PASSWORD)
+        client.login()
+        _client = client
+        return _client
+    except Exception as e:
+        raise Exception(f"Garmin login failed: {e}")
 
 def get_today_stats(target_date: str = None) -> dict:
-    """Fetch today's stats from Garmin Connect."""
-    if not GARMIN_AVAILABLE:
-        return {"error": "Garmin not available on this server", "source": "garmin"}
     if not GARMIN_EMAIL or not GARMIN_PASSWORD:
         return {"error": "Garmin credentials not configured", "source": "garmin"}
-    d = target_date or str(date.today())
     try:
         client = get_client()
-        stats        = client.get_stats(d)
-        sleep        = client.get_sleep_data(d)
-        heart_rates  = client.get_heart_rates(d)
-        stress       = client.get_stress_data(d)
+        d = target_date or str(date.today())
 
-        # Sleep hours
+        stats = client.get_stats(d)
+        sleep = client.get_sleep_data(d)
+        hr    = client.get_heart_rates(d)
+
+        # Sleep
         sleep_seconds = sleep.get("dailySleepDTO", {}).get("sleepTimeSeconds", 0)
         sleep_hours   = round(sleep_seconds / 3600, 1)
 
-        # Resting heart rate
-        resting_hr = stats.get("restingHeartRate", 0)
+        # Heart rate
+        resting_hr = stats.get("restingHeartRate", 0) or hr.get("restingHeartRate", 0)
 
-        # Average stress (0-100)
-        avg_stress = stress.get("avgStressLevel", 0)
-
-        # Steps → convert to exercise minutes (rough estimate: 100 steps/min)
-        steps = stats.get("totalSteps", 0)
-        exercise_minutes = round(steps / 100)
+        # Steps & exercise
+        steps            = stats.get("totalSteps", 0)
+        exercise_minutes = stats.get("moderateIntensityMinutes", 0) + \
+                           stats.get("vigorousIntensityMinutes", 0) * 2
 
         return {
             "sleep":      sleep_hours,
-            "exercise":   exercise_minutes,
-            "water":      0,          # Garmin doesn't track water by default
+            "exercise":   exercise_minutes or round(steps / 100),
+            "water":      0,
             "heart_rate": resting_hr,
-            "meditation": 0,          # not available from Garmin
+            "meditation": 0,
             "steps":      steps,
-            "avg_stress": avg_stress,
             "source":     "garmin",
         }
     except Exception as e:
+        global _client
+        _client = None  # reset on error
         return {"error": str(e), "source": "garmin"}
