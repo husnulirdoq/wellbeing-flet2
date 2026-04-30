@@ -73,3 +73,18 @@ class TrackingEntry(Base):
     created_at  = Column(DateTime, default=datetime.utcnow)
 
     user = relationship("User", back_populates="tracking")
+
+class Product(Base):
+    __tablename__ = "products"
+    id          = Column(Integer, primary_key=True, index=True)
+    name        = Column(String, nullable=False)
+    description = Column(String, default="")
+    price       = Column(Float, nullable=False)
+    orig_price  = Column(Float, nullable=True)
+    discount    = Column(Integer, default=0)
+    emoji       = Column(String, default="🛍️")
+    category    = Column(String, default="Wellness")
+    rating      = Column(Float, default=5.0)
+    stock       = Column(Integer, default=100)
+    active      = Column(Boolean, default=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)

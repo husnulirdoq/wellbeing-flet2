@@ -640,21 +640,10 @@ def main(page: ft.Page):
             )
 
         def pg_more():
-            """More page: AI Assistant + Shop + Logout"""
+            """More page: AI Assistant only"""
             col   = ft.Ref[ft.Column]()
             r_inp = ft.Ref[ft.TextField]()
             msgs  = [{"role":"bot","text":"Hello! I'm your AI health assistant. How can I help?","time":"now"}]
-            cart  = []
-            r_cart = ft.Ref[ft.Text]()
-
-            products = [
-                {"name":"Yoga Mat",    "desc":"Non-slip mat",      "price":49.99,"emoji":"🧘"},
-                {"name":"Meditation Cushion","desc":"Comfy pillow","price":34.99,"emoji":"🌸"},
-                {"name":"Resistance Bands","desc":"Set of 5",      "price":24.99,"emoji":"💪"},
-                {"name":"Oil Diffuser","desc":"Aromatherapy",       "price":39.99,"emoji":"🌺"},
-                {"name":"Water Bottle","desc":"Smart bottle",       "price":29.99,"emoji":"💧"},
-                {"name":"Sleep Mask",  "desc":"Blackout mask",      "price":19.99,"emoji":"😴"},
-            ]
 
             def bubble(m):
                 is_bot = m["role"] == "bot"
@@ -698,19 +687,11 @@ def main(page: ft.Page):
             def add_cart(e, p):
                 cart.append(p)
                 if r_cart.current:
-                    r_cart.current.value = f"🛒 {len(cart)}"
-                    page.update()
+                    r_cart.current.value = f"🛒 {len(cart)} item"
+                    safe_update()
 
             def checkout(e):
                 if not cart: return
-                total = sum(p["price"] for p in cart)
-                res = api_post("/payment/checkout", {
-                    "items": [{"name":p["name"],"price":p["price"],"quantity":1} for p in cart],
-                    "total": total,
-                })
-                if res and res.get("redirect_url"):
-                    page.launch_url(res["redirect_url"])
-
             def do_logout(e):
                 session["token"] = None
                 session["username"] = None
@@ -732,22 +713,306 @@ def main(page: ft.Page):
                             style=ft.ButtonStyle(bgcolor=PRIMARY, shape=ft.RoundedRectangleBorder(radius=10))),
                     ]),
                     ft.Divider(height=24),
-                    # Shop coming soon
-                    card(ft.Column(spacing=8, controls=[
-                        ft.Row(spacing=10, controls=[
-                            ft.Text("🛍️", size=28),
-                            ft.Column(spacing=2, expand=True, controls=[
-                                ft.Text("Wellness Shop", size=15, weight=ft.FontWeight.BOLD, color=DARK),
-                                ft.Text("Coming soon — payment gateway in progress.", size=12, color=GRAY),
-                            ]),
-                        ]),
-                    ])),
                     ft.Container(height=16),
                 ]),
             )
 
+        def pg_shop():
+            # Load products from API
+            raw_products = api_get("/products") or []
+            products = []
+            for p in raw_products:
+                products.append({
+                    "id":    p.get("id"),
+                    "name":  p.get("name",""),
+                    "desc":  p.get("description",""),
+                    "price": float(p.get("price",0)),
+                    "orig":  float(p.get("orig_price")) if p.get("orig_price") else None,
+                    "disc":  int(p.get("discount",0)),
+                    "emoji": p.get("emoji","🛍️"),
+                    "cat":   p.get("category","Wellness"),
+                    "rating":float(p.get("rating",5.0)),
+                })
+
+            # Fallback default products if DB empty
+            if not products:
+                products = [
+                    {"id":None,"name":"Yoga Mat Premium","desc":"Non-slip, eco-friendly","price":49.99,"orig":59.99,"disc":20,"emoji":"🧘","cat":"Fitness","rating":4.8},
+                    {"id":None,"name":"Meditation Cushion","desc":"Comfortable support","price":34.99,"orig":None,"disc":0,"emoji":"🌸","cat":"Wellness","rating":4.6},
+                    {"id":None,"name":"Resistance Bands","desc":"Set of 5 bands","price":21.24,"orig":24.99,"disc":15,"emoji":"💪","cat":"Fitness","rating":4.7},
+                    {"id":None,"name":"Oil Diffuser","desc":"Aromatherapy essential","price":39.99,"orig":None,"disc":0,"emoji":"🌺","cat":"Wellness","rating":4.9},
+                    {"id":None,"name":"Smart Water Bottle","desc":"Hydration tracker","price":26.99,"orig":29.99,"disc":10,"emoji":"💧","cat":"Health","rating":4.5},
+                    {"id":None,"name":"Fitness Tracker","desc":"Health monitoring","price":129.99,"orig":None,"disc":0,"emoji":"⌚","cat":"Technology","rating":4.8},
+                    {"id":None,"name":"Green Tea Organic","desc":"100 premium bags","price":19.99,"orig":None,"disc":0,"emoji":"🍵","cat":"Nutrition","rating":4.7},
+                    {"id":None,"name":"Foam Roller","desc":"Muscle recovery","price":34.99,"orig":None,"disc":0,"emoji":"🔵","cat":"Fitness","rating":4.6},
+                    {"id":None,"name":"Protein Powder","desc":"Whey isolate 2kg","price":41.24,"orig":54.99,"disc":25,"emoji":"🥤","cat":"Nutrition","rating":4.7},
+                    {"id":None,"name":"Sleep Mask","desc":"Silk eye mask","price":14.99,"orig":None,"disc":0,"emoji":"😴","cat":"Wellness","rating":4.1},
+                ]
+
+            cart       = []
+            wishlist   = set()
+            r_cart_btn = ft.Ref[ft.Text]()
+            r_grid     = ft.Ref[ft.Column]()
+            r_search   = ft.Ref[ft.TextField]()
+            active_cat = {"val": "All"}
+            cart_dlg   = ft.Ref[ft.AlertDialog]()
+            r_cart_col = ft.Ref[ft.Column]()
+            r_subtotal = ft.Ref[ft.Text]()
+
+            categories = ["All", "Fitness", "Wellness", "Health", "Technology", "Nutrition"]
+
+            def update_cart_btn():
+                if r_cart_btn.current:
+                    r_cart_btn.current.value = str(len(cart))
+                    safe_update()
+
+            def update_cart_dialog():
+                if r_cart_col.current is None: return
+                if not cart:
+                    r_cart_col.current.controls = [
+                        ft.Text("Cart is empty", color=GRAY, size=13)
+                    ]
+                else:
+                    r_cart_col.current.controls = [
+                        ft.Row(spacing=8, controls=[
+                            ft.Text(p["emoji"], size=24),
+                            ft.Column(spacing=2, expand=True, controls=[
+                                ft.Text(p["name"], size=13, weight=ft.FontWeight.BOLD, color=DARK),
+                                ft.Text(f"${p['price']}", size=12, color=PRIMARY),
+                            ]),
+                            ft.IconButton(ft.Icons.CLOSE, icon_color=RED, icon_size=16,
+                                on_click=lambda e, prod=p: remove_cart(prod)),
+                            ft.Row(spacing=4, controls=[
+                                ft.Text("-", size=14, color=GRAY),
+                                ft.Text("1", size=13, color=DARK),
+                                ft.Text("+", size=14, color=GRAY),
+                            ]),
+                        ]) for p in cart
+                    ]
+                total = sum(p["price"] for p in cart)
+                if r_subtotal.current:
+                    r_subtotal.current.value = f"${total:.2f}"
+                safe_update()
+
+            def remove_cart(prod):
+                if prod in cart:
+                    cart.remove(prod)
+                update_cart_btn()
+                update_cart_dialog()
+
+            def add_cart(e, prod):
+                cart.append(prod)
+                update_cart_btn()
+
+            def open_cart(e):
+                pay_url_store["url"] = ""
+                if r_pay_btn.current:
+                    r_pay_btn.current.visible = False
+                update_cart_dialog()
+                cart_dlg.current.open = True
+                safe_update()
+
+            r_pay_url = ft.Ref[ft.Text]()
+            r_pay_btn = ft.Ref[ft.Button]()
+            pay_url_store = {"url": ""}
+
+            def do_checkout(e):
+                if not cart: return
+                cart_dlg.current.open = False
+                safe_update()
+                total = sum(p["price"] for p in cart)
+
+                def run_checkout():
+                    res = api_post("/payment/checkout", {
+                        "items": [{"name": p["name"], "price": p["price"], "quantity": 1} for p in cart],
+                        "total": total,
+                    })
+                    if res and res.get("payment_url"):
+                        url = res["payment_url"]
+                        pay_url_store["url"] = url
+                        if r_pay_btn.current:
+                            r_pay_btn.current.visible = True
+                        cart_dlg.current.open = True
+                        safe_update()
+                    elif res and res.get("error"):
+                        page.snack_bar = ft.SnackBar(
+                            content=ft.Text(res["error"], color=WHITE), bgcolor=RED)
+                        page.snack_bar.open = True
+                        safe_update()
+
+                import threading
+                threading.Thread(target=run_checkout, daemon=True).start()
+
+            async def open_payment_url(e):
+                url = pay_url_store.get("url", "")
+                if url:
+                    cart_dlg.current.open = False
+                    safe_update()
+                    await page.launch_url(url)
+
+            def rebuild_grid():
+                if r_grid.current is None: return
+                query = (r_search.current.value or "").lower() if r_search.current else ""
+                filtered = [p for p in products if
+                    (active_cat["val"] == "All" or p["cat"] == active_cat["val"]) and
+                    (not query or query in p["name"].lower() or query in p["desc"].lower())]
+
+                def prod_card(p):
+                    in_wish = p["name"] in wishlist
+                    return ft.Container(
+                        bgcolor=WHITE, border_radius=12, padding=12,
+                        shadow=ft.BoxShadow(blur_radius=6, color="#12000000", offset=ft.Offset(0,2)),
+                        content=ft.Column(spacing=6, controls=[
+                            ft.Row(controls=[
+                                ft.Container(expand=True, content=
+                                    ft.Container(
+                                        content=ft.Text(f"-{p['disc']}%", size=10, color=WHITE,
+                                                        weight=ft.FontWeight.BOLD),
+                                        bgcolor=RED, border_radius=4,
+                                        padding=ft.Padding(4,2,4,2),
+                                        visible=p["disc"] > 0,
+                                    )
+                                ),
+                                ft.IconButton(
+                                    icon=ft.Icons.FAVORITE if in_wish else ft.Icons.FAVORITE_BORDER,
+                                    icon_color=RED if in_wish else GRAY,
+                                    icon_size=18,
+                                    on_click=lambda e, pn=p["name"]: (
+                                        wishlist.discard(pn) if pn in wishlist else wishlist.add(pn),
+                                        rebuild_grid()
+                                    ),
+                                ),
+                            ]),
+                            ft.Text(p["emoji"], size=36, text_align=ft.TextAlign.CENTER),
+                            ft.Text(p["name"], size=12, weight=ft.FontWeight.BOLD, color=DARK),
+                            ft.Text(p["desc"], size=10, color=GRAY),
+                            ft.Text(f"⭐ {p['rating']}", size=10, color=ORANGE),
+                            ft.Row(spacing=4, controls=[
+                                ft.Text(f"${p['orig']}", size=10, color=GRAY,
+                                        spans=[ft.TextSpan(style=ft.TextStyle(decoration=ft.TextDecoration.LINE_THROUGH))])
+                                if p.get("orig") else ft.Container(),
+                            ]),
+                            ft.Text(f"${p['price']}", size=14, weight=ft.FontWeight.BOLD, color=PRIMARY),
+                            ft.Button(
+                                content=ft.Text("+ Add", color=WHITE, size=12),
+                                on_click=lambda e, prod=p: add_cart(e, prod),
+                                expand=True,
+                                style=ft.ButtonStyle(bgcolor=PRIMARY,
+                                    shape=ft.RoundedRectangleBorder(radius=8),
+                                    padding=ft.Padding(0,8,0,8)),
+                            ),
+                        ]),
+                    )
+
+                # 2-column grid
+                rows = []
+                for i in range(0, len(filtered), 2):
+                    row_items = filtered[i:i+2]
+                    rows.append(ft.Row(spacing=10, controls=[
+                        ft.Container(content=prod_card(p), expand=True) for p in row_items
+                    ] + ([ft.Container(expand=True)] if len(row_items) < 2 else [])))
+
+                r_grid.current.controls = rows or [ft.Text("No products found.", color=GRAY)]
+                safe_update()
+
+            # Cart dialog
+            cart_dialog = ft.AlertDialog(
+                ref=cart_dlg,
+                title=ft.Row(controls=[
+                    ft.Text("Cart", size=16, weight=ft.FontWeight.BOLD, color=DARK, expand=True),
+                    ft.IconButton(ft.Icons.CLOSE, icon_color=GRAY, icon_size=18,
+                        on_click=lambda e: setattr(cart_dlg.current,"open",False) or safe_update()),
+                ]),
+                content=ft.Container(
+                    width=320, height=300,
+                    content=ft.Column(scroll=ft.ScrollMode.AUTO, controls=[
+                        ft.Column(ref=r_cart_col, spacing=8,
+                                  controls=[ft.Text("Cart is empty", color=GRAY)]),
+                        ft.Divider(),
+                        ft.Row(controls=[
+                            ft.Text("Subtotal", size=13, color=DARK, expand=True),
+                            ft.Text(ref=r_subtotal, value="$0.00", size=14,
+                                    weight=ft.FontWeight.BOLD, color=DARK),
+                        ]),
+                    ]),
+                ),
+                actions=[
+                    ft.Column(spacing=8, controls=[
+                        ft.Text(ref=r_pay_url, value="", visible=False, size=11,
+                                color=PRIMARY, selectable=True),
+                        ft.Button(content=ft.Text("Checkout Now", color=WHITE, size=14),
+                            on_click=do_checkout, expand=True,
+                            style=ft.ButtonStyle(bgcolor=PRIMARY,
+                                shape=ft.RoundedRectangleBorder(radius=10),
+                                padding=ft.Padding(0,14,0,14))),
+                        ft.Button(content=ft.Text("💳 Pay Now", color=WHITE, size=14),
+                            ref=r_pay_btn,
+                            on_click=open_payment_url, expand=True,
+                            visible=False,
+                            style=ft.ButtonStyle(bgcolor=GREEN,
+                                shape=ft.RoundedRectangleBorder(radius=10),
+                                padding=ft.Padding(0,14,0,14))),
+                    ]),
+                ],
+                actions_padding=ft.Padding(16,0,16,16),
+            )
+            page.overlay.append(cart_dialog)
+
+            grid_col = ft.Column(ref=r_grid, spacing=10)
+            rebuild_grid()
+
+            def on_search(e):
+                rebuild_grid()
+
+            def on_cat(e, cat):
+                active_cat["val"] = cat
+                rebuild_grid()
+
+            cat_row = ft.Row(scroll=ft.ScrollMode.AUTO, spacing=8, controls=[
+                ft.Button(
+                    content=ft.Text(c, size=12,
+                                    color=WHITE if c == active_cat["val"] else DARK),
+                    on_click=lambda e, cat=c: on_cat(e, cat),
+                    style=ft.ButtonStyle(
+                        bgcolor=PRIMARY if c == active_cat["val"] else WHITE,
+                        shape=ft.RoundedRectangleBorder(radius=20),
+                        side=ft.BorderSide(1, "#E5E7EB"),
+                        padding=ft.Padding(12,6,12,6),
+                    ),
+                ) for c in categories
+            ])
+
+            return ft.Container(expand=True, padding=16,
+                content=ft.Column(expand=True, spacing=10, controls=[
+                    ft.Row(controls=[
+                        ft.Text("Wellness Shop", size=18, weight=ft.FontWeight.BOLD,
+                                color=DARK, expand=True),
+                        ft.Stack(controls=[
+                            ft.IconButton(ft.Icons.SHOPPING_CART_OUTLINED,
+                                icon_color=PRIMARY, icon_size=24, on_click=open_cart),
+                            ft.Container(
+                                content=ft.Text(ref=r_cart_btn, value="0", size=9,
+                                                color=WHITE, text_align=ft.TextAlign.CENTER),
+                                bgcolor=RED, border_radius=10, width=16, height=16,
+                                right=4, top=4,
+                                visible=True,
+                            ),
+                        ]),
+                    ]),
+                    ft.TextField(ref=r_search, hint_text="Search wellness products...",
+                                 prefix_icon=ft.Icons.SEARCH, border_radius=10,
+                                 on_change=on_search),
+                    cat_row,
+                    ft.Container(
+                        content=ft.Column(ref=r_grid, spacing=10, scroll=ft.ScrollMode.AUTO,
+                                          expand=True),
+                        expand=True,
+                    ),
+                ]),
+            )
+
         # Pages list
-        pages = [pg_dashboard, pg_journal, pg_todo, pg_tracking, pg_more]
+        pages = [pg_dashboard, pg_journal, pg_todo, pg_tracking, pg_more, pg_shop]
         current_idx = ft.Ref[ft.NavigationBar]()
 
         def on_nav(e):
@@ -770,8 +1035,10 @@ def main(page: ft.Page):
                     selected_icon=ft.Icons.CHECK_BOX, label="To-Do"),
                 ft.NavigationBarDestination(icon=ft.Icons.MONITOR_HEART_OUTLINED,
                     selected_icon=ft.Icons.MONITOR_HEART, label="Track"),
-                ft.NavigationBarDestination(icon=ft.Icons.MORE_HORIZ,
-                    selected_icon=ft.Icons.MORE_HORIZ, label="More"),
+                ft.NavigationBarDestination(icon=ft.Icons.CHAT_OUTLINED,
+                    selected_icon=ft.Icons.CHAT, label="AI"),
+                ft.NavigationBarDestination(icon=ft.Icons.SHOPPING_BAG_OUTLINED,
+                    selected_icon=ft.Icons.SHOPPING_BAG, label="Shop"),
             ],
         )
 
@@ -816,6 +1083,11 @@ if WEB_PORT:
     ft.app(main, port=WEB_PORT, assets_dir="assets")
 else:
     ft.app(main, assets_dir="assets")
+
+
+
+
+
 
 
 

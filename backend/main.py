@@ -91,6 +91,18 @@ class TrackingSchema(BaseModel):
 class AnalyzeSchema(BaseModel):
     text: str
 
+class ProductSchema(BaseModel):
+    name:        str
+    description: Optional[str] = ""
+    price:       float
+    orig_price:  Optional[float] = None
+    discount:    Optional[int]   = 0
+    emoji:       Optional[str]   = "🛍️"
+    category:    Optional[str]   = "Wellness"
+    rating:      Optional[float] = 5.0
+    stock:       Optional[int]   = 100
+    active:      Optional[bool]  = True
+
 class ChatSchema(BaseModel):
     message: str
     history: Optional[list] = None
@@ -318,6 +330,50 @@ def analyze(data: AnalyzeSchema):
 def root():
     return {"status": "ok"}
 
+# ── Products ───────────────────────────────────────────────
+
+@app.get("/products")
+def get_products(db: Session = Depends(get_db)):
+    products = db.query(models.Product).filter(models.Product.active == True).all()
+    return products
+
+@app.get("/products/all")
+def get_all_products(db: Session = Depends(get_db),
+                     current_user: models.User = Depends(auth.get_current_user)):
+    return db.query(models.Product).all()
+
+@app.post("/products")
+def create_product(data: ProductSchema, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(auth.get_current_user)):
+    product = models.Product(**data.model_dump())
+    db.add(product)
+    db.commit()
+    db.refresh(product)
+    return product
+
+@app.put("/products/{product_id}")
+def update_product(product_id: int, data: ProductSchema,
+                   db: Session = Depends(get_db),
+                   current_user: models.User = Depends(auth.get_current_user)):
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    for k, v in data.model_dump().items():
+        setattr(product, k, v)
+    db.commit()
+    db.refresh(product)
+    return product
+
+@app.delete("/products/{product_id}")
+def delete_product(product_id: int, db: Session = Depends(get_db),
+                   current_user: models.User = Depends(auth.get_current_user)):
+    product = db.query(models.Product).filter(models.Product.id == product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    db.delete(product)
+    db.commit()
+    return {"status": "deleted"}
+
 # ── Gemini Chat ────────────────────────────────────────────
 
 @app.post("/chat")
@@ -376,7 +432,7 @@ def garmin_sync(db: Session = Depends(get_db),
 @app.post("/payment/checkout")
 def checkout(data: CheckoutSchema,
              current_user: models.User = Depends(auth.get_current_user)):
-    if not payment_service.MIDTRANS_SERVER_KEY:
+    if not payment_service.DOKU_API_KEY:
         raise HTTPException(status_code=503, detail="Payment not configured yet")
     customer = {"name": current_user.username, "email": current_user.email}
     result = payment_service.create_transaction(
@@ -384,6 +440,8 @@ def checkout(data: CheckoutSchema,
         customer,
         data.total,
     )
+    if "error" in result:
+        raise HTTPException(status_code=400, detail=result["error"])
     return result
 
 @app.post("/payment/notification")
