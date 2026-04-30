@@ -13,6 +13,8 @@ import models, auth
 import garmin_service
 import payment_service
 import firebase_auth as fb
+import gemini_service
+import weather_service
 
 app = FastAPI(title="WellBeing Tracker API")
 
@@ -88,6 +90,10 @@ class TrackingSchema(BaseModel):
 
 class AnalyzeSchema(BaseModel):
     text: str
+
+class ChatSchema(BaseModel):
+    message: str
+    history: Optional[list] = None
 
 class CheckoutItem(BaseModel):
     name: str
@@ -311,6 +317,21 @@ def analyze(data: AnalyzeSchema):
 @app.get("/")
 def root():
     return {"status": "ok"}
+
+# ── Gemini Chat ────────────────────────────────────────────
+
+@app.post("/chat")
+def chat(data: ChatSchema,
+         current_user: models.User = Depends(auth.get_current_user)):
+    reply = gemini_service.chat(data.message, data.history)
+    return {"reply": reply}
+
+# ── Weather ────────────────────────────────────────────────
+
+@app.get("/weather")
+def weather(city: str = "Jakarta",
+            current_user: models.User = Depends(auth.get_current_user)):
+    return weather_service.get_weather(city)
 
 # ── Garmin ─────────────────────────────────────────────────
 

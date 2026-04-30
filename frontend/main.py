@@ -1,13 +1,18 @@
 import flet as ft
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 
 API_URL          = os.getenv("API_URL", "https://husnulirdoq-wellbeing-backend.hf.space")
 FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyCTJ-9XV1DUQKFHPSRs5HYPLg8VW6DfoUM")
 FB_SIGNIN        = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 FB_SIGNUP        = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
 WEB_PORT         = int(os.getenv("WEB_PORT", "0")) or None
+
+WIB = timezone(timedelta(hours=7))
+
+def now_wib():
+    return datetime.now(WIB)
 
 BG      = "#F0F4FF"
 PRIMARY = "#4F46E5"
@@ -63,6 +68,12 @@ def main(page: ft.Page):
             padding=16, margin=ft.Margin(0, 0, 0, mb),
             shadow=ft.BoxShadow(blur_radius=8, color="#15000000", offset=ft.Offset(0, 2)),
         )
+
+    def safe_update():
+        try:
+            page.update()
+        except:
+            pass
 
     def mbtn(label, on_click, bg=PRIMARY, fg=WHITE, expand=False):
         return ft.Button(
@@ -221,7 +232,7 @@ def main(page: ft.Page):
         def pg_dashboard():
             r_content = ft.Ref[ft.Column]()
 
-            def build_content(summary, journals, todos):
+            def build_content(summary, journals, todos, weather=None):
                 s        = (summary or {}).get("summary")
                 done     = [t for t in todos if t.get("done")]
                 wellness = int(((s["avg_mood"]+s["avg_energy"]+(10-s["avg_stress"]))/30)*100) if s else 0
@@ -257,10 +268,36 @@ def main(page: ft.Page):
                 ]
 
                 if r_content.current:
+                    weather_card = []
+                    if weather and not weather.get("error"):
+                        icons = {"01":"☀️","02":"⛅","03":"☁️","04":"☁️","09":"🌧️","10":"🌦️","11":"⛈️","13":"❄️","50":"🌫️"}
+                        wicon = icons.get((weather.get("icon","")[:2]), "🌤️")
+                        now = now_wib()
+                        hari = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"][now.weekday()]
+                        tgl  = now.strftime(f"{hari}, %d %B %Y")
+                        jam  = now.strftime("%H:%M")
+                        weather_card = [card(ft.Column(spacing=8, controls=[
+                            ft.Row(controls=[
+                                ft.Text(tgl, size=12, color=GRAY, expand=True),
+                                ft.Text(jam, size=12, color=GRAY),
+                            ]),
+                            ft.Row(spacing=12,
+                                vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                                    ft.Text(wicon, size=32),
+                                    ft.Column(spacing=2, expand=True, controls=[
+                                        ft.Text(f"{weather.get('temp','--')}°C — {weather.get('description','').capitalize()}",
+                                                size=14, weight=ft.FontWeight.BOLD, color=DARK),
+                                        ft.Text(f"{weather.get('city','')}  💧{weather.get('humidity','')}%  💨{weather.get('wind_speed','')}m/s",
+                                                size=11, color=GRAY),
+                                    ]),
+                                ]),
+                        ])), ft.Container(height=4)]
+
                     r_content.current.controls = [
                         ft.Text(f"Hi, {session['username']}! 👋",
                                 size=18, weight=ft.FontWeight.BOLD, color=DARK),
                         ft.Container(height=12),
+                        *weather_card,
                         ft.Row(spacing=8, controls=[
                             stat("📖", len(journals), "Journals", PRIMARY),
                             stat("✅", len(done),     "Tasks",    GREEN),
@@ -289,7 +326,8 @@ def main(page: ft.Page):
                 summary  = api_get("/entries/summary")
                 journals = api_get("/journal") or []
                 todos    = api_get("/todos") or []
-                build_content(summary, journals, todos)
+                weather  = api_get("/weather")
+                build_content(summary, journals, todos, weather)
 
             page.run_thread(load)
 
@@ -359,7 +397,7 @@ def main(page: ft.Page):
                 r_body.current.value  = ""
                 # Optimistic — add temp entry instantly
                 temp = {"title": title, "body": body, "mood": mood,
-                        "created_at": datetime.now().isoformat(), "_temp": True, "id": None}
+                        "created_at": now_wib().isoformat(), "_temp": True, "id": None}
                 local_entries.insert(0, temp)
                 render()
                 # Send to API in background
@@ -626,22 +664,22 @@ def main(page: ft.Page):
             def send(e):
                 txt = r_inp.current.value or ""
                 if not txt.strip(): return
-                now = datetime.now().strftime("%I:%M %p")
+                now = now_wib().strftime("%I:%M %p")
                 msgs.append({"role":"user","text":txt,"time":now})
                 r_inp.current.value = ""
                 rebuild_chat()
-                res = api_post("/analyze", {"text": txt})
-                if res:
-                    analysis = res.get("analysis", [[]])
-                    if analysis and isinstance(analysis[0], list):
-                        top = max(analysis[0], key=lambda x: x["score"])
-                        reply = f"I sense you're feeling {top['label'].lower()}. Would you like wellness tips?"
-                    else:
-                        reply = "Thanks for sharing! How can I help?"
-                else:
-                    reply = "I'm here to help! Tell me more."
-                msgs.append({"role":"bot","text":reply,"time":datetime.now().strftime("%I:%M %p")})
-                rebuild_chat()
+
+                history = [{"role": "user" if m["role"] == "user" else "model",
+                            "text": m["text"]} for m in msgs[:-1]]
+
+                def do_chat():
+                    res = api_post("/chat", {"message": txt, "history": history})
+                    reply = res.get("reply", "I'm here to help!") if res else "I'm here to help!"
+                    msgs.append({"role":"bot","text":reply,"time":now_wib().strftime("%I:%M %p")})
+                    rebuild_chat()
+
+                import threading
+                threading.Thread(target=do_chat, daemon=True).start()
 
             def add_cart(e, p):
                 cart.append(p)
@@ -787,5 +825,7 @@ if WEB_PORT:
     ft.app(main, port=WEB_PORT, assets_dir="assets")
 else:
     ft.app(main, assets_dir="assets")
+
+
 
 

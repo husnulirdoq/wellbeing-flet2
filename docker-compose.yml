@@ -32,6 +32,8 @@ services:
       - MIDTRANS_SERVER_KEY=${MIDTRANS_SERVER_KEY}
       - MIDTRANS_IS_PRODUCTION=false
       - FIREBASE_API_KEY=${FIREBASE_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - WEATHER_API_KEY=${WEATHER_API_KEY}
     depends_on:
       db:
         condition: service_healthy
