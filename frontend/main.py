@@ -232,12 +232,28 @@ def main(page: ft.Page):
         def pg_dashboard():
             r_content = ft.Ref[ft.Column]()
 
-            def build_content(summary, journals, todos, weather=None):
-                s        = (summary or {}).get("summary")
-                done     = [t for t in todos if t.get("done")]
-                wellness = int(((s["avg_mood"]+s["avg_energy"]+(10-s["avg_stress"]))/30)*100) if s else 0
+            def build_content(data):
+                if not data:
+                    if r_content.current:
+                        r_content.current.controls = [
+                            ft.Text("Could not load dashboard.", color=GRAY)]
+                        safe_update()
+                    return
 
-                def stat(icon, val, lbl, color):
+                streak       = data.get("streak", 0)
+                avg_mood     = data.get("avg_mood", 0)
+                avg_sleep    = data.get("avg_sleep", 0)
+                wellness     = data.get("wellness_score", 0)
+                journals     = data.get("total_journals", 0)
+                active_todos = data.get("active_todos", 0)
+                done_todos   = data.get("done_todos", 0)
+                mood_trend   = data.get("mood_trend", [])
+                recent_j     = data.get("recent_journals", [])
+                tracking     = data.get("today_tracking")
+
+                mood_icons = {"happy":"😊","neutral":"😐","sad":"😔","excited":"🤩"}
+
+                def stat(icon, val, lbl, color, sub=None):
                     return ft.Container(
                         expand=True, bgcolor=WHITE, border_radius=14, padding=12,
                         shadow=ft.BoxShadow(blur_radius=6, color="#12000000", offset=ft.Offset(0,2)),
@@ -245,89 +261,85 @@ def main(page: ft.Page):
                             ft.Text(icon, size=22),
                             ft.Text(str(val), size=20, weight=ft.FontWeight.BOLD, color=color),
                             ft.Text(lbl, size=10, color=GRAY),
+                            ft.Text(sub, size=9, color=GRAY) if sub else ft.Container(height=0),
                         ]),
                     )
 
-                acts = (
-                    [ft.Row(spacing=10, controls=[
-                        ft.Text(i, size=16),
-                        ft.Column(spacing=1, expand=True, controls=[
-                            ft.Text(t, size=13, color=DARK),
-                            ft.Text(tm, size=11, color=GRAY),
-                        ]),
-                    ]) for i,t,tm in
-                    [("📖",j["title"],j.get("created_at","")[:10]) for j in journals[:3]] +
-                    [("✅",t["title"],"done") for t in done[:2]]]
-                    or [ft.Text("No activity yet.", color=GRAY, size=13)]
+                # Mood trend bar chart
+                trend_bars = ft.Row(spacing=4, alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                    controls=[
+                        ft.Column(spacing=2, horizontal_alignment=ft.CrossAxisAlignment.CENTER, controls=[
+                            ft.Container(
+                                width=28,
+                                height=max(4, int((d["mood"] or 0) / 10 * 50)),
+                                bgcolor=PRIMARY if d["mood"] else "#E5E7EB",
+                                border_radius=4,
+                            ),
+                            ft.Text(d["day"], size=9, color=GRAY),
+                            ft.Text(str(d["mood"]) if d["mood"] else "-", size=9, color=DARK),
+                        ]) for d in mood_trend
+                    ]
                 )
 
-                goals = [
-                    ("Journals",  min(len(journals)/10,1.0), PRIMARY),
-                    ("Tasks done",min(len(done)/10,1.0),     GREEN),
-                    ("Wellness",  wellness/100,               ORANGE),
-                ]
+                # Today's tracking summary
+                tracking_row = ft.Row(spacing=8, controls=[
+                    ft.Column(spacing=1, horizontal_alignment=ft.CrossAxisAlignment.CENTER, expand=True, controls=[
+                        ft.Text(icon, size=18),
+                        ft.Text(f"{val}{unit}", size=11, weight=ft.FontWeight.BOLD, color=DARK),
+                        ft.Text(lbl, size=9, color=GRAY),
+                    ]) for icon, val, unit, lbl in [
+                        ("🌙", tracking["sleep"] if tracking else 0, "h", "Sleep"),
+                        ("🏃", tracking["exercise"] if tracking else 0, "m", "Exercise"),
+                        ("💧", tracking["water"] if tracking else 0, "", "Water"),
+                        ("❤️", tracking["heart_rate"] if tracking else 0, "", "HR"),
+                        ("🧘", tracking["meditation"] if tracking else 0, "m", "Meditate"),
+                    ]
+                ]) if tracking else ft.Text("No tracking data today. Go to Track tab!", size=12, color=GRAY)
+
+                # Todo progress
+                total_todos = active_todos + done_todos
+                todo_progress = done_todos / total_todos if total_todos > 0 else 0
 
                 if r_content.current:
-                    weather_card = []
-                    if weather and not weather.get("error"):
-                        icons = {"01":"☀️","02":"⛅","03":"☁️","04":"☁️","09":"🌧️","10":"🌦️","11":"⛈️","13":"❄️","50":"🌫️"}
-                        wicon = icons.get((weather.get("icon","")[:2]), "🌤️")
-                        now = now_wib()
-                        hari = ["Senin","Selasa","Rabu","Kamis","Jumat","Sabtu","Minggu"][now.weekday()]
-                        tgl  = now.strftime(f"{hari}, %d %B %Y")
-                        jam  = now.strftime("%H:%M")
-                        weather_card = [card(ft.Column(spacing=8, controls=[
-                            ft.Row(controls=[
-                                ft.Text(tgl, size=12, color=GRAY, expand=True),
-                                ft.Text(jam, size=12, color=GRAY),
-                            ]),
-                            ft.Row(spacing=12,
-                                vertical_alignment=ft.CrossAxisAlignment.CENTER, controls=[
-                                    ft.Text(wicon, size=32),
-                                    ft.Column(spacing=2, expand=True, controls=[
-                                        ft.Text(f"{weather.get('temp','--')}°C — {weather.get('description','').capitalize()}",
-                                                size=14, weight=ft.FontWeight.BOLD, color=DARK),
-                                        ft.Text(f"{weather.get('city','')}  💧{weather.get('humidity','')}%  💨{weather.get('wind_speed','')}m/s",
-                                                size=11, color=GRAY),
-                                    ]),
-                                ]),
-                        ])), ft.Container(height=4)]
-
                     r_content.current.controls = [
                         ft.Text(f"Hi, {session['username']}! 👋",
                                 size=18, weight=ft.FontWeight.BOLD, color=DARK),
                         ft.Container(height=12),
-                        *weather_card,
+                        # Stats row
                         ft.Row(spacing=8, controls=[
-                            stat("📖", len(journals), "Journals", PRIMARY),
-                            stat("✅", len(done),     "Tasks",    GREEN),
-                            stat("💪", f"{wellness}%","Wellness", ORANGE),
-                            stat("📝", s["total_entries"] if s else 0, "Logs", RED),
+                            stat("🔥", f"{streak}d", "Streak", RED, "days in a row"),
+                            stat("😊", f"{avg_mood}/10", "Avg Mood", PRIMARY, "this week"),
+                            stat("🌙", f"{avg_sleep}h", "Sleep", "#06B6D4", "today"),
+                            stat("💪", f"{wellness}%", "Wellness", ORANGE, "score"),
                         ]),
                         ft.Container(height=12),
+                        # Mood trend
                         card(ft.Column(spacing=10, controls=[
-                            ft.Text("Recent Activity", size=14, weight=ft.FontWeight.BOLD, color=DARK),
-                            *acts,
+                            ft.Text("Mood This Week", size=14, weight=ft.FontWeight.BOLD, color=DARK),
+                            trend_bars,
                         ])),
+                        # Today's tracking
                         card(ft.Column(spacing=10, controls=[
-                            ft.Text("Today's Goals", size=14, weight=ft.FontWeight.BOLD, color=DARK),
-                            *[ft.Column(spacing=4, controls=[
-                                ft.Row(controls=[
-                                    ft.Text(l, size=13, color=DARK, expand=True),
-                                    ft.Text(f"{int(p*100)}%", size=12, color=c),
-                                ]),
-                                ft.ProgressBar(value=p, color=c, bgcolor="#E5E7EB", height=6),
-                            ]) for l,p,c in goals],
+                            ft.Text("Today's Activity", size=14, weight=ft.FontWeight.BOLD, color=DARK),
+                            tracking_row,
+                        ])),
+                        # Todo progress
+                        card(ft.Column(spacing=8, controls=[
+                            ft.Row(controls=[
+                                ft.Text("Tasks", size=14, weight=ft.FontWeight.BOLD, color=DARK, expand=True),
+                                ft.Text(f"{done_todos}/{total_todos} done", size=12, color=GRAY),
+                            ]),
+                            ft.ProgressBar(value=todo_progress, color=GREEN, bgcolor="#E5E7EB", height=8),
+                            *([ft.Text(f"📖 {j['title']} — {mood_icons.get(j['mood'],'😊')}",
+                                       size=12, color=DARK) for j in recent_j]
+                              if recent_j else [ft.Text("No journal entries yet.", size=12, color=GRAY)]),
                         ])),
                     ]
-                    page.update()
+                    safe_update()
 
             def load():
-                summary  = api_get("/entries/summary")
-                journals = api_get("/journal") or []
-                todos    = api_get("/todos") or []
-                weather  = api_get("/weather")
-                build_content(summary, journals, todos, weather)
+                data = api_get("/dashboard")
+                build_content(data)
 
             page.run_thread(load)
 
@@ -338,8 +350,8 @@ def main(page: ft.Page):
                                 size=18, weight=ft.FontWeight.BOLD, color=DARK),
                         ft.Container(height=20),
                         ft.Row(alignment=ft.MainAxisAlignment.CENTER, controls=[
-                            ft.ProgressRing(width=32, height=32, color=PRIMARY),
-                            ft.Container(width=12),
+                            ft.ProgressRing(width=28, height=28, color=PRIMARY),
+                            ft.Container(width=10),
                             ft.Text("Loading...", color=GRAY, size=13),
                         ]),
                     ]),

@@ -26,7 +26,7 @@ services:
     command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
     environment:
       - HF_TOKEN=${HF_TOKEN}
-      - DATABASE_URL=postgresql://wellbeing:wellbeing123@db:5432/wellbeing
+      - DATABASE_URL=${DATABASE_URL:-postgresql://wellbeing:wellbeing123@db:5432/wellbeing}
       - GARMIN_EMAIL=${GARMIN_EMAIL}
       - GARMIN_PASSWORD=${GARMIN_PASSWORD}
       - MIDTRANS_SERVER_KEY=${MIDTRANS_SERVER_KEY}
@@ -37,6 +37,7 @@ services:
       - FIREBASE_API_KEY=${FIREBASE_API_KEY}
       - GEMINI_API_KEY=${GEMINI_API_KEY}
       - WEATHER_API_KEY=${WEATHER_API_KEY}
+      - ADMIN_EMAILS=${ADMIN_EMAILS}
     depends_on:
       db:
         condition: service_healthy

@@ -143,7 +143,15 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
 
 @app.get("/auth/me")
 def me(current_user: models.User = Depends(auth.get_current_user)):
-    return {"id": current_user.id, "email": current_user.email, "username": current_user.username}
+    return {"id": current_user.id, "email": current_user.email,
+            "username": current_user.username, "role": current_user.role}
+
+@app.get("/users")
+def get_users(db: Session = Depends(get_db),
+              current_user: models.User = Depends(auth.get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    return db.query(models.User).all()
 
 @app.post("/auth/firebase")
 def firebase_login(data: FirebaseLoginSchema, db: Session = Depends(get_db)):
@@ -153,22 +161,31 @@ def firebase_login(data: FirebaseLoginSchema, db: Session = Depends(get_db)):
         raise HTTPException(status_code=401, detail="Invalid Firebase token")
 
     email = user_info.get("email") or data.email
+    admin_emails = [e.strip() for e in os.getenv("ADMIN_EMAILS", "").split(",") if e.strip()]
+    role = "admin" if email in admin_emails else "user"
+
     user = db.query(models.User).filter(models.User.email == email).first()
 
     if not user:
-        # Auto-register on first login
         username = data.username or email.split("@")[0]
         user = models.User(
             email=email,
             username=username,
-            hashed_pw=auth.hash_password(os.urandom(32).hex()),  # random pw, not used
+            hashed_pw=auth.hash_password(os.urandom(32).hex()),
+            role=role,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+    else:
+        # Update role if in admin list
+        if role == "admin" and user.role != "admin":
+            user.role = "admin"
+            db.commit()
 
     token = auth.create_token({"sub": user.id})
-    return {"access_token": token, "token_type": "bearer", "username": user.username}
+    return {"access_token": token, "token_type": "bearer",
+            "username": user.username, "role": user.role}
 
 # ── Wellbeing Entries ──────────────────────────────────────
 
@@ -204,6 +221,87 @@ def get_summary(db: Session = Depends(get_db),
         "avg_stress":  round(sum(e.stress for e in entries) / n, 2),
         "avg_sleep":   round(sum(e.sleep_hours for e in entries) / n, 2),
     }}
+
+@app.get("/dashboard")
+def get_dashboard(db: Session = Depends(get_db),
+                  current_user: models.User = Depends(auth.get_current_user)):
+    """Comprehensive dashboard data."""
+    from datetime import date, timedelta
+
+    today = date.today()
+    week_ago = today - timedelta(days=7)
+
+    # All entries
+    all_entries = db.query(models.WellbeingEntry).filter(
+        models.WellbeingEntry.user_id == current_user.id
+    ).order_by(models.WellbeingEntry.created_at.desc()).all()
+
+    # This week entries
+    week_entries = [e for e in all_entries
+                    if e.created_at.date() >= week_ago]
+
+    # Streak — count consecutive days with tracking entry
+    streak = 0
+    check_date = today
+    entry_dates = {e.created_at.date() for e in all_entries}
+    while check_date in entry_dates:
+        streak += 1
+        check_date -= timedelta(days=1)
+
+    # Today's tracking
+    today_tracking = db.query(models.TrackingEntry).filter(
+        models.TrackingEntry.user_id == current_user.id,
+        models.TrackingEntry.date == str(today)
+    ).first()
+
+    # Todos
+    todos = db.query(models.Todo).filter(
+        models.Todo.user_id == current_user.id
+    ).all()
+    active_todos  = [t for t in todos if not t.done]
+    done_todos    = [t for t in todos if t.done]
+
+    # Journals
+    journals = db.query(models.JournalEntry).filter(
+        models.JournalEntry.user_id == current_user.id
+    ).order_by(models.JournalEntry.created_at.desc()).all()
+
+    # Weekly mood trend
+    mood_trend = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        day_entries = [e for e in all_entries if e.created_at.date() == d]
+        mood_trend.append({
+            "date": str(d),
+            "day": ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][d.weekday()],
+            "mood": round(sum(e.mood for e in day_entries) / len(day_entries), 1) if day_entries else None,
+            "energy": round(sum(e.energy for e in day_entries) / len(day_entries), 1) if day_entries else None,
+        })
+
+    # Avg this week
+    avg_mood   = round(sum(e.mood for e in week_entries) / len(week_entries), 1) if week_entries else 0
+    avg_sleep  = round(today_tracking.sleep, 1) if today_tracking else 0
+    wellness   = round(((avg_mood / 10) * 100)) if avg_mood else 0
+
+    return {
+        "streak":        streak,
+        "avg_mood":      avg_mood,
+        "avg_sleep":     avg_sleep,
+        "wellness_score": wellness,
+        "total_journals": len(journals),
+        "active_todos":  len(active_todos),
+        "done_todos":    len(done_todos),
+        "mood_trend":    mood_trend,
+        "recent_journals": [{"title": j.title, "mood": j.mood,
+                              "date": str(j.created_at.date())} for j in journals[:3]],
+        "today_tracking": {
+            "sleep":      today_tracking.sleep if today_tracking else 0,
+            "exercise":   today_tracking.exercise if today_tracking else 0,
+            "water":      today_tracking.water if today_tracking else 0,
+            "heart_rate": today_tracking.heart_rate if today_tracking else 0,
+            "meditation": today_tracking.meditation if today_tracking else 0,
+        } if today_tracking else None,
+    }
 
 # ── Journal ────────────────────────────────────────────────
 

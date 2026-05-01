@@ -15,6 +15,7 @@ class User(Base):
     email      = Column(String, unique=True, index=True, nullable=False)
     username   = Column(String, nullable=False)
     hashed_pw  = Column(String, nullable=False)
+    role       = Column(String, default="user")  # "user" or "admin"
     created_at = Column(DateTime, default=datetime.utcnow)
 
     entries    = relationship("WellbeingEntry", back_populates="user")

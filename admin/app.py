@@ -17,10 +17,40 @@ if "token" not in st.session_state:
         r = requests.post(f"{API_URL}/auth/login",
                           data={"username": email, "password": pwd}, timeout=10)
         if r.status_code == 200:
-            st.session_state.token = r.json()["access_token"]
-            st.rerun()
+            data = r.json()
+            if data.get("role") != "admin":
+                st.error("Access denied. Admin only.")
+            else:
+                st.session_state.token = data["access_token"]
+                st.rerun()
         else:
             st.error("Login gagal.")
+    
+    # Firebase login for admin
+    st.divider()
+    st.caption("Or login with Firebase credentials (email/password from app)")
+    fb_email = st.text_input("Firebase Email", key="fb_email")
+    fb_pwd   = st.text_input("Firebase Password", type="password", key="fb_pwd")
+    if st.button("Login with Firebase"):
+        FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyCTJ-9XV1DUQKFHPSRs5HYPLg8VW6DfoUM")
+        r = requests.post(
+            f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}",
+            json={"email": fb_email, "password": fb_pwd, "returnSecureToken": True}, timeout=15)
+        if r.ok:
+            id_token = r.json()["idToken"]
+            r2 = requests.post(f"{API_URL}/auth/firebase",
+                               json={"id_token": id_token, "email": fb_email}, timeout=20)
+            if r2.ok:
+                data = r2.json()
+                if data.get("role") != "admin":
+                    st.error("Access denied. Admin only.")
+                else:
+                    st.session_state.token = data["access_token"]
+                    st.rerun()
+            else:
+                st.error("Server error.")
+        else:
+            st.error(r.json().get("error", {}).get("message", "Login gagal."))
     st.stop()
 
 headers = {"Authorization": f"Bearer {st.session_state.token}"}
@@ -217,4 +247,10 @@ with tab5:
 # ── Users ──────────────────────────────────────────────────
 with tab6:
     st.subheader("👥 User Management")
-    st.info("User management coming soon.")
+    users = api_get("/users")
+    if not users:
+        st.info("No users yet.")
+    else:
+        df_u = pd.DataFrame(users)
+        st.write(f"**{len(df_u)} users total**")
+        st.dataframe(df_u[["id","email","username","role","created_at"]], use_container_width=True)
