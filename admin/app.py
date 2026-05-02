@@ -157,6 +157,25 @@ with tab5:
 
     # Add new product
     with st.expander("➕ Add New Product", expanded=False):
+        # Upload image OUTSIDE form
+        uploaded_file = st.file_uploader("Product Image", type=["jpg", "jpeg", "png"], key="new_img")
+        img_url = ""
+        if uploaded_file:
+            if st.button("Upload Image", key="upload_btn"):
+                r = requests.post(
+                    f"{API_URL}/upload/image",
+                    files={"file": (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type)},
+                    headers=headers, timeout=20)
+                if r.ok:
+                    img_url = r.json().get("url", "")
+                    st.session_state["new_img_url"] = img_url
+                    st.success(f"✅ Image uploaded!")
+                else:
+                    st.error(f"Upload failed: {r.text}")
+            if "new_img_url" in st.session_state:
+                img_url = st.session_state["new_img_url"]
+                st.image(img_url, width=100)
+
         with st.form("add_product"):
             c1, c2 = st.columns(2)
             name     = c1.text_input("Product Name *")
@@ -171,27 +190,19 @@ with tab5:
             rating   = c7.number_input("Rating", min_value=0.0, max_value=5.0, value=5.0, step=0.1)
             stock    = c8.number_input("Stock", min_value=0, value=100)
             active   = st.checkbox("Active", value=True)
-            uploaded_file = st.file_uploader("Product Image", type=["jpg", "jpeg", "png"])
-            img_url = ""
-            if uploaded_file:
-                files = {"file": uploaded_file.getvalue()}
-                r = requests.post(f"{API_URL}/upload/image", 
-                                files={"file": (uploaded_file.name, uploaded_file.getvalue())},
-                                headers=headers, timeout=20)
-                if r.ok:
-                    img_url = r.json().get("url", "")
-
 
             if st.form_submit_button("Add Product"):
                 if not name:
                     st.error("Product name is required.")
                 else:
+                    final_img_url = st.session_state.pop("new_img_url", "")
                     result = api_post("/products", {
                         "name": name, "description": desc, "price": price,
                         "orig_price": orig if orig > 0 else None,
                         "discount": discount, "emoji": emoji,
                         "category": category, "rating": rating,
-                        "stock": stock, "active": active, "image_url": img_url,
+                        "stock": stock, "active": active,
+                        "image_url": final_img_url,
                     })
                     if result:
                         st.success(f"✅ Product '{name}' added!")

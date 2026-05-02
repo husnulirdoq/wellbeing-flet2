@@ -885,9 +885,7 @@ def main(page: ft.Page):
                                     ),
                                 ),
                             ]),
-                            ft.Image(src=p.get("image_url",""), width=80, height=80,
-                                     error_content=ft.Text(p["emoji"], size=36,
-                                                           text_align=ft.TextAlign.CENTER))
+                            ft.Image(src=p.get("image_url",""), width=80, height=80)
                             if p.get("image_url") else
                             ft.Text(p["emoji"], size=36, text_align=ft.TextAlign.CENTER),
                             ft.Text(p["name"], size=12, weight=ft.FontWeight.BOLD, color=DARK),
