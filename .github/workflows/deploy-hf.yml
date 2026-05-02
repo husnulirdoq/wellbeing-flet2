@@ -27,6 +27,7 @@ jobs:
           cp backend/payment_service.py hf-backend/
           cp backend/gemini_service.py hf-backend/
           cp backend/weather_service.py hf-backend/
+          cp backend/cloudinary_service.py hf-backend/
           cp backend/requirements-hf.txt hf-backend/requirements.txt
           cp backend/Dockerfile hf-backend/
           cp backend/README.md hf-backend/

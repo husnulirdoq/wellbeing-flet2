@@ -14,3 +14,4 @@ cryptography
 garminconnect==0.1.55
 cloudscraper==1.2.71
 requests-toolbelt==1.0.0
+cloudinary==1.36.0

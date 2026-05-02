@@ -89,3 +89,4 @@ class Product(Base):
     stock       = Column(Integer, default=100)
     active      = Column(Boolean, default=True)
     created_at  = Column(DateTime, default=datetime.utcnow)
+    image_url = Column(String, nullable=True)

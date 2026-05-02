@@ -171,6 +171,16 @@ with tab5:
             rating   = c7.number_input("Rating", min_value=0.0, max_value=5.0, value=5.0, step=0.1)
             stock    = c8.number_input("Stock", min_value=0, value=100)
             active   = st.checkbox("Active", value=True)
+            uploaded_file = st.file_uploader("Product Image", type=["jpg", "jpeg", "png"])
+            img_url = ""
+            if uploaded_file:
+                files = {"file": uploaded_file.getvalue()}
+                r = requests.post(f"{API_URL}/upload/image", 
+                                files={"file": (uploaded_file.name, uploaded_file.getvalue())},
+                                headers=headers, timeout=20)
+                if r.ok:
+                    img_url = r.json().get("url", "")
+
 
             if st.form_submit_button("Add Product"):
                 if not name:
@@ -181,7 +191,7 @@ with tab5:
                         "orig_price": orig if orig > 0 else None,
                         "discount": discount, "emoji": emoji,
                         "category": category, "rating": rating,
-                        "stock": stock, "active": active,
+                        "stock": stock, "active": active, "image_url": img_url,
                     })
                     if result:
                         st.success(f"✅ Product '{name}' added!")

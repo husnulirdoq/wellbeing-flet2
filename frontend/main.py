@@ -735,31 +735,21 @@ def main(page: ft.Page):
             products = []
             for p in raw_products:
                 products.append({
-                    "id":    p.get("id"),
-                    "name":  p.get("name",""),
-                    "desc":  p.get("description",""),
-                    "price": float(p.get("price",0)),
-                    "orig":  float(p.get("orig_price")) if p.get("orig_price") else None,
-                    "disc":  int(p.get("discount",0)),
-                    "emoji": p.get("emoji","🛍️"),
-                    "cat":   p.get("category","Wellness"),
-                    "rating":float(p.get("rating",5.0)),
+                    "id":       p.get("id"),
+                    "name":     p.get("name",""),
+                    "desc":     p.get("description",""),
+                    "price":    float(p.get("price",0)),
+                    "orig":     float(p.get("orig_price")) if p.get("orig_price") else None,
+                    "disc":     int(p.get("discount",0)),
+                    "emoji":    p.get("emoji","🛍️"),
+                    "cat":      p.get("category","Wellness"),
+                    "rating":   float(p.get("rating",5.0)),
+                    "image_url":p.get("image_url",""),
                 })
 
             # Fallback default products if DB empty
             if not products:
-                products = [
-                    {"id":None,"name":"Yoga Mat Premium","desc":"Non-slip, eco-friendly","price":49.99,"orig":59.99,"disc":20,"emoji":"🧘","cat":"Fitness","rating":4.8},
-                    {"id":None,"name":"Meditation Cushion","desc":"Comfortable support","price":34.99,"orig":None,"disc":0,"emoji":"🌸","cat":"Wellness","rating":4.6},
-                    {"id":None,"name":"Resistance Bands","desc":"Set of 5 bands","price":21.24,"orig":24.99,"disc":15,"emoji":"💪","cat":"Fitness","rating":4.7},
-                    {"id":None,"name":"Oil Diffuser","desc":"Aromatherapy essential","price":39.99,"orig":None,"disc":0,"emoji":"🌺","cat":"Wellness","rating":4.9},
-                    {"id":None,"name":"Smart Water Bottle","desc":"Hydration tracker","price":26.99,"orig":29.99,"disc":10,"emoji":"💧","cat":"Health","rating":4.5},
-                    {"id":None,"name":"Fitness Tracker","desc":"Health monitoring","price":129.99,"orig":None,"disc":0,"emoji":"⌚","cat":"Technology","rating":4.8},
-                    {"id":None,"name":"Green Tea Organic","desc":"100 premium bags","price":19.99,"orig":None,"disc":0,"emoji":"🍵","cat":"Nutrition","rating":4.7},
-                    {"id":None,"name":"Foam Roller","desc":"Muscle recovery","price":34.99,"orig":None,"disc":0,"emoji":"🔵","cat":"Fitness","rating":4.6},
-                    {"id":None,"name":"Protein Powder","desc":"Whey isolate 2kg","price":41.24,"orig":54.99,"disc":25,"emoji":"🥤","cat":"Nutrition","rating":4.7},
-                    {"id":None,"name":"Sleep Mask","desc":"Silk eye mask","price":14.99,"orig":None,"disc":0,"emoji":"😴","cat":"Wellness","rating":4.1},
-                ]
+                products = []
 
             cart       = []
             wishlist   = set()
@@ -895,6 +885,10 @@ def main(page: ft.Page):
                                     ),
                                 ),
                             ]),
+                            ft.Image(src=p.get("image_url",""), width=80, height=80,
+                                     error_content=ft.Text(p["emoji"], size=36,
+                                                           text_align=ft.TextAlign.CENTER))
+                            if p.get("image_url") else
                             ft.Text(p["emoji"], size=36, text_align=ft.TextAlign.CENTER),
                             ft.Text(p["name"], size=12, weight=ft.FontWeight.BOLD, color=DARK),
                             ft.Text(p["desc"], size=10, color=GRAY),

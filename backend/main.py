@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException
+from fastapi import FastAPI, Depends, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -7,6 +7,10 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime, date
 import os, requests, asyncio
+import cloudinary
+import cloudinary.uploader
+from fastapi import File, UploadFile
+
 
 from database import engine, get_db, Base
 import models, auth
@@ -15,6 +19,7 @@ import payment_service
 import firebase_auth as fb
 import gemini_service
 import weather_service
+import cloudinary_service
 
 app = FastAPI(title="WellBeing Tracker API")
 
@@ -36,6 +41,12 @@ def startup():
     except Exception:
         pass  # pgvector not available, skip
     Base.metadata.create_all(bind=engine)
+    cloudinary.config(
+        cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME", ""),
+        api_key=os.getenv("CLOUDINARY_API_KEY", ""),
+        api_secret=os.getenv("CLOUDINARY_API_SECRET", ""),
+    )
+
     # Start keep-alive background task
     asyncio.create_task(keep_alive())
 
@@ -98,10 +109,12 @@ class ProductSchema(BaseModel):
     orig_price:  Optional[float] = None
     discount:    Optional[int]   = 0
     emoji:       Optional[str]   = "🛍️"
+    image_url:   Optional[str]   = None
     category:    Optional[str]   = "Wellness"
     rating:      Optional[float] = 5.0
     stock:       Optional[int]   = 100
     active:      Optional[bool]  = True
+
 
 class ChatSchema(BaseModel):
     message: str
@@ -428,6 +441,19 @@ def analyze(data: AnalyzeSchema):
 def root():
     return {"status": "ok"}
 
+# ── Image Upload ───────────────────────────────────────────
+
+@app.post("/upload/image")
+async def upload_image(file: UploadFile = File(...),
+                       current_user: models.User = Depends(auth.get_current_user)):
+    if not cloudinary_service.CLOUDINARY_CLOUD_NAME:
+        raise HTTPException(status_code=503, detail="Cloudinary not configured")
+    contents = await file.read()
+    url = cloudinary_service.upload_image(contents, file.filename)
+    if not url:
+        raise HTTPException(status_code=500, detail="Upload failed")
+    return {"url": url}
+
 # ── Products ───────────────────────────────────────────────
 
 @app.get("/products")
@@ -448,6 +474,19 @@ def create_product(data: ProductSchema, db: Session = Depends(get_db),
     db.commit()
     db.refresh(product)
     return product
+
+@app.post("/upload/image")
+async def upload_image(file: UploadFile = File(...),
+                       current_user: models.User = Depends(auth.get_current_user)):
+    if current_user.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin only")
+    try:
+        contents = await file.read()
+        result = cloudinary.uploader.upload(contents, folder="wellbeing-products")
+        return {"url": result["secure_url"]}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
 
 @app.put("/products/{product_id}")
 def update_product(product_id: int, data: ProductSchema,
