@@ -569,7 +569,7 @@ def garmin_sync(db: Session = Depends(get_db),
 @app.post("/payment/checkout")
 def checkout(data: CheckoutSchema,
              current_user: models.User = Depends(auth.get_current_user)):
-    if not payment_service.DOKU_API_KEY:
+    if not payment_service.MIDTRANS_SERVER_KEY:
         raise HTTPException(status_code=503, detail="Payment not configured yet")
     customer = {"name": current_user.username, "email": current_user.email}
     result = payment_service.create_transaction(
