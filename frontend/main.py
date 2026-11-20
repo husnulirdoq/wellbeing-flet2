@@ -1,12 +1,16 @@
 import flet as ft
 import requests
 import os
+import json
+import uuid
 from datetime import datetime, timezone, timedelta
+from health_connect import HealthConnect
 
 API_URL          = os.getenv("API_URL", "https://husnulirdoq-wellbeing-backend.hf.space")
 FIREBASE_API_KEY = os.getenv("FIREBASE_API_KEY", "AIzaSyCTJ-9XV1DUQKFHPSRs5HYPLg8VW6DfoUM")
 FB_SIGNIN        = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 FB_SIGNUP        = "https://identitytoolkit.googleapis.com/v1/accounts:signUp"
+FB_RESET_PASSWORD = "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode"
 WEB_PORT         = int(os.getenv("WEB_PORT", "0")) or None
 
 WIB = timezone(timedelta(hours=7))
@@ -14,9 +18,9 @@ WIB = timezone(timedelta(hours=7))
 def now_wib():
     return datetime.now(WIB)
 
-BG      = "#F0F4FF"
-PRIMARY = "#4F46E5"
-PL      = "#EEF2FF"
+BG      = "#4F6D50"
+PRIMARY = "#4F6D50"
+PL      = "#E5EEE4"
 WHITE   = "#FFFFFF"
 DARK    = "#1E1B4B"
 GRAY    = "#6B7280"
@@ -103,6 +107,7 @@ def main(page: ft.Page):
         r_err   = ft.Ref[ft.Text]()
         r_label = ft.Ref[ft.Text]()
         r_link  = ft.Ref[ft.Text]()
+        r_reset = ft.Ref[ft.TextButton]()
         mode    = {"reg": False}
 
         def do_login(e):
@@ -117,7 +122,17 @@ def main(page: ft.Page):
                 r = requests.post(f"{FB_SIGNIN}?key={FIREBASE_API_KEY}",
                     json={"email": email, "password": pwd, "returnSecureToken": True}, timeout=15)
                 if not r.ok:
-                    set_err(f"❌ {r.json().get('error',{}).get('message','Login gagal.')}"); return
+                    code = r.json().get("error", {}).get("message", "LOGIN_FAILED")
+                    messages = {
+                        "EMAIL_NOT_FOUND": "Email belum terdaftar.",
+                        "INVALID_LOGIN_CREDENTIALS": "Email atau password salah.",
+                        "INVALID_PASSWORD": "Email atau password salah.",
+                        "INVALID_EMAIL": "Format email tidak valid.",
+                        "USER_DISABLED": "Akun ini telah dinonaktifkan.",
+                        "TOO_MANY_ATTEMPTS_TRY_LATER": "Terlalu banyak percobaan. Coba lagi nanti.",
+                        "API_KEY_INVALID": "Konfigurasi Firebase tidak valid.",
+                    }
+                    set_err("❌ " + messages.get(code, "Login gagal. Periksa email dan password.")); return
                 tok = r.json()["idToken"]
                 r2 = requests.post(f"{API_URL}/auth/firebase",
                     json={"id_token": tok, "email": email}, timeout=20)
@@ -158,6 +173,52 @@ def main(page: ft.Page):
             except:
                 set_err("❌ Tidak bisa terhubung.")
 
+        def reset_password(e):
+            email = (r_email.current.value or "").strip() if r_email.current else ""
+            if not email:
+                if r_err.current:
+                    r_err.current.value = "Masukkan email terlebih dahulu."
+                    r_err.current.color = RED
+                    page.update()
+                return
+
+            if r_err.current:
+                r_err.current.value = "⏳ Mengirim tautan reset password..."
+                r_err.current.color = WHITE
+                page.update()
+            try:
+                response = requests.post(
+                    f"{FB_RESET_PASSWORD}?key={FIREBASE_API_KEY}",
+                    json={"requestType": "PASSWORD_RESET", "email": email},
+                    timeout=15,
+                )
+                if response.ok:
+                    message = (
+                        "Jika email terdaftar, tautan reset password sudah dikirim. "
+                        "Periksa inbox atau folder spam."
+                    )
+                    color = WHITE
+                else:
+                    error = response.json().get("error", {}).get("message", "")
+                    messages = {
+                        "EMAIL_NOT_FOUND": "Email tersebut belum terdaftar.",
+                        "INVALID_EMAIL": "Format email tidak valid.",
+                        "TOO_MANY_ATTEMPTS_TRY_LATER": "Terlalu banyak percobaan. Coba lagi nanti.",
+                        "OPERATION_NOT_ALLOWED": "Reset password belum diaktifkan di Firebase.",
+                        "API_KEY_INVALID": "Konfigurasi Firebase tidak valid.",
+                        "KEY_EXPIRED": "API key Firebase sudah kedaluwarsa.",
+                    }
+                    message = messages.get(error, "Gagal mengirim tautan reset password.")
+                    color = RED
+            except requests.RequestException:
+                message = "Tidak bisa terhubung. Periksa koneksi lalu coba lagi."
+                color = RED
+
+            if r_err.current:
+                r_err.current.value = message
+                r_err.current.color = color
+                page.update()
+
         def toggle(e):
             mode["reg"] = not mode["reg"]
             r_uname.current.visible = mode["reg"]
@@ -166,58 +227,78 @@ def main(page: ft.Page):
             page.update()
 
         return ft.Container(
-            expand=True, bgcolor=WHITE,
-            padding=ft.Padding(28, 0, 28, 28),
-            content=ft.Column(
-                scroll=ft.ScrollMode.AUTO,
-                horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
-                controls=[
-                    ft.Container(height=64),
-                    ft.Row(alignment=ft.MainAxisAlignment.CENTER, controls=[
-                        ft.Image(src="logo.png", width=160, height=160),
-                    ]),
-                    ft.Container(height=12),
-                    ft.Text("WellBeing Tracker", size=22,
-                            weight=ft.FontWeight.BOLD, color=DARK,
-                            text_align=ft.TextAlign.CENTER),
-                    ft.Text("Track your wellness journey", size=13,
-                            color=GRAY, text_align=ft.TextAlign.CENTER),
-                    ft.Container(height=32),
-                    ft.TextField(ref=r_uname, label="Username",
-                                 border_radius=10, visible=False),
-                    ft.Container(height=4),
-                    ft.TextField(ref=r_email, label="Email",
-                                 keyboard_type=ft.KeyboardType.EMAIL,
-                                 border_radius=10),
-                    ft.Container(height=8),
-                    ft.TextField(ref=r_pass, label="Password",
-                                 password=True, can_reveal_password=True,
-                                 border_radius=10),
-                    ft.Container(height=4),
-                    ft.Text(ref=r_err, value="", color=RED, size=12),
-                    ft.Container(height=8),
-                    ft.Button(
-                        content=ft.Text(ref=r_label, value="MASUK",
-                                        color=WHITE, size=15,
-                                        weight=ft.FontWeight.BOLD),
-                        on_click=lambda e: do_register(e) if mode["reg"] else do_login(e),
-                        expand=True,
-                        style=ft.ButtonStyle(
-                            bgcolor=TEAL, color=WHITE,
-                            shape=ft.RoundedRectangleBorder(radius=10),
-                            padding=ft.Padding(0, 16, 0, 16),
+            expand=True, bgcolor=BG,
+            alignment=ft.Alignment(0, 0),
+            padding=ft.Padding(10, 10, 10, 10),
+            content=ft.Container(
+                width=420,
+                bgcolor="#66806A",
+                border_radius=24,
+                padding=ft.Padding(24, 18, 24, 14),
+                shadow=ft.BoxShadow(
+                    blur_radius=24,
+                    spread_radius=2,
+                    color="#24000000",
+                    offset=ft.Offset(0, 8),
+                ),
+                content=ft.Column(
+                    scroll=ft.ScrollMode.AUTO,
+                    horizontal_alignment=ft.CrossAxisAlignment.STRETCH,
+                    controls=[
+                        ft.Text("WellBeing Tracker", size=22,
+                                weight=ft.FontWeight.BOLD, color=WHITE,
+                                text_align=ft.TextAlign.CENTER),
+                        ft.Container(height=12),
+                        ft.TextField(ref=r_uname, label="Username", visible=False),
+                        ft.TextField(
+                            ref=r_email, label="Email",
+                            keyboard_type=ft.KeyboardType.EMAIL,
+                            bgcolor=WHITE, color=DARK,
+                            border_color="#D8E4D7", focused_border_color=TEAL,
+                            border_radius=12,
                         ),
-                    ),
-                    ft.Container(height=8),
-                    ft.Row(alignment=ft.MainAxisAlignment.CENTER, controls=[
-                        ft.TextButton(
-                            content=ft.Text(ref=r_link,
-                                            value="Belum punya akun? Daftar",
-                                            color=PRIMARY),
-                            on_click=toggle,
+                        ft.Container(height=6),
+                        ft.TextField(
+                            ref=r_pass, label="Password",
+                            password=True, can_reveal_password=True,
+                            bgcolor=WHITE, color=DARK,
+                            border_color="#D8E4D7", focused_border_color=TEAL,
+                            border_radius=12,
                         ),
-                    ]),
-                ],
+                        ft.Container(height=6),
+                        ft.Text(ref=r_err, value="", color=RED, size=12,
+                                text_align=ft.TextAlign.CENTER),
+                        ft.Container(height=6),
+                        ft.Button(
+                            content=ft.Text(ref=r_label, value="MASUK",
+                                            color=WHITE, size=15,
+                                            weight=ft.FontWeight.BOLD),
+                            on_click=lambda e: do_register(e) if mode["reg"] else do_login(e),
+                            expand=True,
+                            style=ft.ButtonStyle(
+                                bgcolor=TEAL, color=WHITE,
+                                shape=ft.RoundedRectangleBorder(radius=12),
+                                padding=ft.Padding(0, 16, 0, 16),
+                            ),
+                        ),
+                        ft.Row(
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                            controls=[
+                                ft.TextButton(
+                                    ref=r_reset,
+                                    content=ft.Text("Lupa password?", size=12, color=WHITE),
+                                    on_click=reset_password,
+                                ),
+                                ft.TextButton(
+                                    content=ft.Text(ref=r_link,
+                                                    value="Daftar",
+                                                    size=12, color=WHITE),
+                                    on_click=toggle,
+                                ),
+                            ],
+                        ),
+                    ],
+                ),
             ),
         )
 
@@ -583,6 +664,10 @@ def main(page: ft.Page):
             vals   = {k:0 for k in fields}
             r_vals = {k:ft.Ref[ft.Text]() for k in fields}
             r_bars = {k:ft.Ref[ft.ProgressBar]() for k in fields}
+            r_sync_btn = ft.Ref[ft.Button]()
+            r_sync_label = ft.Ref[ft.Text]()
+            r_sync_status = ft.Ref[ft.Text]()
+            r_health_connect = ft.Ref[HealthConnect]()
 
             def load():
                 data = api_get("/tracking/today") or {}
@@ -594,6 +679,89 @@ def main(page: ft.Page):
                     if r_vals[k].current: r_vals[k].current.value = str(vals[k])
                     if r_bars[k].current: r_bars[k].current.value = min(vals[k]/fields[k]["target"],1.0)
                 page.update()
+
+            def on_health_connect_result(e: ft.Event):
+                button = r_sync_btn.current
+
+                try:
+                    result = json.loads(e.data) if isinstance(e.data, str) else e.data
+                except (TypeError, ValueError):
+                    result = {}
+
+                if not isinstance(result, dict) or not result.get("ok"):
+                    message = (
+                        result.get("message", "Gagal membaca data Google Health Connect.")
+                        if isinstance(result, dict)
+                        else "Respons Google Health Connect tidak valid."
+                    )
+                    r_sync_status.current.value = message
+                    r_sync_status.current.color = RED
+                    if button:
+                        button.disabled = False
+                    if r_sync_label.current:
+                        r_sync_label.current.value = "Google Health"
+                    safe_update()
+                    return
+
+                data = result.get("data", {})
+                if not isinstance(data, dict):
+                    r_sync_status.current.value = "Data Google Health Connect tidak valid."
+                    r_sync_status.current.color = RED
+                    if button:
+                        button.disabled = False
+                    if r_sync_label.current:
+                        r_sync_label.current.value = "Google Health"
+                    safe_update()
+                    return
+
+                for key in fields:
+                    if key in data:
+                        vals[key] = data[key]
+
+                def save_synced_values():
+                    saved = api_post("/health-connect/sync", vals)
+                    if not saved:
+                        r_sync_status.current.value = "Data terbaca, tetapi gagal disimpan ke server."
+                        r_sync_status.current.color = RED
+                    else:
+                        for key in fields:
+                            vals[key] = saved.get(key, vals[key])
+                        update_all()
+                        r_sync_status.current.value = "Data Google Health Connect berhasil disinkronkan."
+                        r_sync_status.current.color = GREEN
+                    if button:
+                        button.disabled = False
+                    if r_sync_label.current:
+                        r_sync_label.current.value = "Google Health"
+                    safe_update()
+
+                page.run_thread(save_synced_values)
+
+            def sync_health_connect(e):
+                button = r_sync_btn.current
+                status = r_sync_status.current
+                if page.platform != ft.PagePlatform.ANDROID:
+                    status.value = "Sinkronisasi hanya tersedia di aplikasi Android."
+                    status.color = ORANGE
+                    safe_update()
+                    return
+                if button:
+                    button.disabled = True
+                if r_sync_label.current:
+                    r_sync_label.current.value = "⏳ Syncing..."
+                if status:
+                    status.value = "Meminta izin Google Health Connect..."
+                    status.color = WHITE
+                safe_update()
+                if r_health_connect.current:
+                    r_health_connect.current.request_id = str(uuid.uuid4())
+                    page.update()
+                else:
+                    if button:
+                        button.disabled = False
+                    status.value = "Integrasi native tidak tersedia. Perbarui APK aplikasi."
+                    status.color = RED
+                    safe_update()
 
             def make_card(key):
                 d = fields[key]
@@ -630,14 +798,8 @@ def main(page: ft.Page):
                 content=ft.Column(scroll=ft.ScrollMode.AUTO, expand=True, controls=[
                     ft.Row(controls=[
                         ft.Text("Mind & Body", size=18, weight=ft.FontWeight.BOLD, color=DARK, expand=True),
-                        ft.Button(content=ft.Text("🔄 Garmin", color=WHITE, size=12),
-                            on_click=lambda e: (
-                                setattr(page, 'snack_bar', ft.SnackBar(
-                                    content=ft.Text("Garmin sync tidak tersedia dari server. Gunakan input manual.", color=WHITE),
-                                    bgcolor=ORANGE)) or
-                                setattr(page.snack_bar, 'open', True) or
-                                safe_update()
-                            ),
+                        ft.Button(ref=r_sync_btn, content=ft.Text(ref=r_sync_label, value="Google Health", color=WHITE, size=12),
+                            on_click=sync_health_connect,
                             style=ft.ButtonStyle(bgcolor="#111827", shape=ft.RoundedRectangleBorder(radius=8),
                                                  padding=ft.Padding(10,6,10,6))),
                         ft.Container(width=6),
@@ -646,7 +808,17 @@ def main(page: ft.Page):
                             style=ft.ButtonStyle(bgcolor=PRIMARY, shape=ft.RoundedRectangleBorder(radius=8),
                                                  padding=ft.Padding(10,6,10,6))),
                     ]),
+                    ft.Text(ref=r_sync_status, value="", size=12, color=WHITE),
                     ft.Container(height=8),
+                    *(
+                        [HealthConnect(
+                            ref=r_health_connect,
+                            request_id="",
+                            on_result=on_health_connect_result,
+                        )]
+                        if page.platform == ft.PagePlatform.ANDROID
+                        else []
+                    ),
                     *cards,
                 ]),
             )
@@ -760,6 +932,8 @@ def main(page: ft.Page):
             cart_dlg   = ft.Ref[ft.AlertDialog]()
             r_cart_col = ft.Ref[ft.Column]()
             r_subtotal = ft.Ref[ft.Text]()
+            r_checkout_status = ft.Ref[ft.Text]()
+            r_checkout_btn = ft.Ref[ft.Button]()
 
             categories = ["All", "Fitness", "Wellness", "Health", "Technology", "Nutrition"]
 
@@ -820,27 +994,68 @@ def main(page: ft.Page):
 
             def do_checkout(e):
                 if not cart: return
-                cart_dlg.current.open = False
+                if r_checkout_btn.current:
+                    r_checkout_btn.current.disabled = True
+                    r_checkout_btn.current.content.value = "Memproses..."
+                if r_checkout_status.current:
+                    r_checkout_status.current.value = "Menghubungi penyedia pembayaran..."
+                    r_checkout_status.current.color = GRAY
                 safe_update()
                 total = sum(p["price"] for p in cart)
 
                 def run_checkout():
-                    res = api_post("/payment/checkout", {
-                        "items": [{"name": p["name"], "price": p["price"], "quantity": 1} for p in cart],
-                        "total": total,
-                    })
-                    if res and res.get("payment_url"):
-                        url = res["payment_url"]
-                        pay_url_store["url"] = url
-                        if r_pay_btn.current:
-                            r_pay_btn.current.visible = True
+                    message = ""
+                    color = RED
+                    try:
+                        response = requests.post(
+                            f"{API_URL}/payment/checkout",
+                            json={
+                                "items": [
+                                    {"name": p["name"], "price": p["price"], "quantity": 1}
+                                    for p in cart
+                                ],
+                                "total": total,
+                            },
+                            headers=hdrs(),
+                            timeout=20,
+                        )
+                        try:
+                            result = response.json()
+                        except ValueError:
+                            result = {}
+
+                        if response.ok and result.get("payment_url"):
+                            pay_url_store["url"] = result["payment_url"]
+                            if r_pay_btn.current:
+                                r_pay_btn.current.visible = True
+                            if r_checkout_status.current:
+                                r_checkout_status.current.value = "Pesanan siap dibayar."
+                                r_checkout_status.current.color = GREEN
+                        else:
+                            detail = result.get("detail", "")
+                            if response.status_code == 401:
+                                message = "Sesi login berakhir. Login kembali untuk checkout."
+                            elif response.status_code == 503 and "Payment not configured" in detail:
+                                message = (
+                                    "Checkout belum aktif: kunci Midtrans belum diatur. "
+                                    "Tambahkan MIDTRANS_SERVER_KEY di .env server."
+                                )
+                            elif detail:
+                                message = str(detail)
+                            else:
+                                message = f"Checkout gagal (HTTP {response.status_code})."
+                    except requests.RequestException:
+                        message = "Tidak bisa terhubung ke server pembayaran. Coba lagi."
+
+                    if message and r_checkout_status.current:
+                        r_checkout_status.current.value = message
+                        r_checkout_status.current.color = color
+                    if r_checkout_btn.current:
+                        r_checkout_btn.current.disabled = False
+                        r_checkout_btn.current.content.value = "Checkout Now"
+                    if cart_dlg.current:
                         cart_dlg.current.open = True
-                        safe_update()
-                    elif res and res.get("error"):
-                        page.snack_bar = ft.SnackBar(
-                            content=ft.Text(res["error"], color=WHITE), bgcolor=RED)
-                        page.snack_bar.open = True
-                        safe_update()
+                    safe_update()
 
                 import threading
                 threading.Thread(target=run_checkout, daemon=True).start()
@@ -938,13 +1153,14 @@ def main(page: ft.Page):
                             ft.Text(ref=r_subtotal, value="$0.00", size=14,
                                     weight=ft.FontWeight.BOLD, color=DARK),
                         ]),
+                        ft.Text(ref=r_checkout_status, value="", size=12, color=RED),
                     ]),
                 ),
                 actions=[
                     ft.Column(spacing=8, controls=[
                         ft.Text(ref=r_pay_url, value="", visible=False, size=11,
                                 color=PRIMARY, selectable=True),
-                        ft.Button(content=ft.Text("Checkout Now", color=WHITE, size=14),
+                        ft.Button(ref=r_checkout_btn, content=ft.Text("Checkout Now", color=WHITE, size=14),
                             on_click=do_checkout, expand=True,
                             style=ft.ButtonStyle(bgcolor=PRIMARY,
                                 shape=ft.RoundedRectangleBorder(radius=10),
@@ -992,13 +1208,24 @@ def main(page: ft.Page):
                         ft.Text("Wellness Shop", size=18, weight=ft.FontWeight.BOLD,
                                 color=DARK, expand=True),
                         ft.Stack(controls=[
-                            ft.IconButton(ft.Icons.SHOPPING_CART_OUTLINED,
-                                icon_color=PRIMARY, icon_size=24, on_click=open_cart),
+                            ft.Container(
+                                content=ft.IconButton(
+                                    ft.Icons.SHOPPING_CART_OUTLINED,
+                                    icon_color=PRIMARY,
+                                    icon_size=24,
+                                    tooltip="Buka keranjang belanja",
+                                    on_click=open_cart,
+                                ),
+                                bgcolor=WHITE,
+                                border_radius=12,
+                                width=48,
+                                height=48,
+                            ),
                             ft.Container(
                                 content=ft.Text(ref=r_cart_btn, value="0", size=9,
                                                 color=WHITE, text_align=ft.TextAlign.CENTER),
-                                bgcolor=RED, border_radius=10, width=16, height=16,
-                                right=4, top=4,
+                                bgcolor=RED, border_radius=10, width=20, height=20,
+                                right=0, top=0,
                                 visible=True,
                             ),
                         ]),
@@ -1016,7 +1243,7 @@ def main(page: ft.Page):
             )
 
         # Pages list
-        pages = [pg_dashboard, pg_journal, pg_todo, pg_tracking, pg_more, pg_shop]
+        pages = [pg_dashboard, pg_journal, pg_todo, pg_tracking, pg_more]
         current_idx = ft.Ref[ft.NavigationBar]()
 
         def on_nav(e):
@@ -1041,8 +1268,6 @@ def main(page: ft.Page):
                     selected_icon=ft.Icons.MONITOR_HEART, label="Track"),
                 ft.NavigationBarDestination(icon=ft.Icons.CHAT_OUTLINED,
                     selected_icon=ft.Icons.CHAT, label="AI"),
-                ft.NavigationBarDestination(icon=ft.Icons.SHOPPING_BAG_OUTLINED,
-                    selected_icon=ft.Icons.SHOPPING_BAG, label="Shop"),
             ],
         )
 
@@ -1083,16 +1308,4 @@ def main(page: ft.Page):
     # Go straight to login — native splash screen handles the intro
     page.add(build_login())
 
-if WEB_PORT:
-    ft.app(main, port=WEB_PORT, assets_dir="assets")
-else:
-    ft.app(main, assets_dir="assets")
-
-
-
-
-
-
-
-
-
+ft.run(main, host="0.0.0.0", port=WEB_PORT or 0, assets_dir="assets")

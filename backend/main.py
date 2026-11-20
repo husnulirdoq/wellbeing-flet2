@@ -14,7 +14,6 @@ from fastapi import File, UploadFile
 
 from database import engine, get_db, Base
 import models, auth
-import garmin_service
 import payment_service
 import firebase_auth as fb
 import gemini_service
@@ -526,43 +525,40 @@ def weather(city: str = "Jakarta",
             current_user: models.User = Depends(auth.get_current_user)):
     return weather_service.get_weather(city)
 
-# ── Garmin ─────────────────────────────────────────────────
+# ── Google Health Connect ──────────────────────────────────
 
-@app.get("/garmin/today")
-def garmin_today(current_user: models.User = Depends(auth.get_current_user)):
-    data = garmin_service.get_today_stats()
-    if "error" in data:
-        raise HTTPException(status_code=503, detail=data["error"])
-    return data
-
-@app.post("/garmin/sync")
-def garmin_sync(db: Session = Depends(get_db),
-                current_user: models.User = Depends(auth.get_current_user)):
-    """Fetch from Garmin and save to tracking DB."""
-    data = garmin_service.get_today_stats()
-    if "error" in data:
-        raise HTTPException(status_code=503, detail=data["error"])
-
-    today = str(date.today())
+@app.post("/health-connect/sync")
+def health_connect_sync(data: TrackingSchema, db: Session = Depends(get_db),
+                        current_user: models.User = Depends(auth.get_current_user)):
+    """Save health values received from the Android Health Connect bridge."""
+    today = data.date or str(date.today())
     existing = db.query(models.TrackingEntry).filter(
         models.TrackingEntry.user_id == current_user.id,
         models.TrackingEntry.date == today
     ).first()
 
-    fields = {k: data.get(k, 0) for k in ["sleep", "exercise", "water", "heart_rate", "meditation"]}
+    fields = {
+        "sleep": data.sleep or 0,
+        "exercise": data.exercise or 0,
+        "water": data.water or 0,
+        "heart_rate": data.heart_rate or 0,
+        "meditation": data.meditation or 0,
+    }
 
     if existing:
         for k, v in fields.items():
             setattr(existing, k, v)
-        db.commit()
-        db.refresh(existing)
-        return existing
+    else:
+        existing = models.TrackingEntry(
+            user_id=current_user.id,
+            date=today,
+            **fields,
+        )
+        db.add(existing)
 
-    entry = models.TrackingEntry(user_id=current_user.id, date=today, **fields)
-    db.add(entry)
     db.commit()
-    db.refresh(entry)
-    return entry
+    db.refresh(existing)
+    return existing
 
 # ── Payment ────────────────────────────────────────────────
 

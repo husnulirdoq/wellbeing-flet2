@@ -1,3 +1,20 @@
+[project]
+name = "wellbeing-tracker"
+version = "1.0.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "flet==1.1.2",
+    "requests",
+    "flet-health-connect @ file:../../health_connect_extension",
+]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["main", "health_connect"]
+
 [tool.flet]
 org = "com.wellbeing.tracker"
 product = "WellBeing Tracker"
@@ -10,11 +27,12 @@ assets_dir = "assets"
 
 [tool.flet.android]
 icon = "assets/icon/icon.png"
-splash_color = "#FFFFFF"
-splash_dark_color = "#FFFFFF"
+splash_color = "#4F6D50"
+splash_dark_color = "#4F6D50"
+min_sdk_version = 26
 
 [tool.flet.splash]
-color = "#FFFFFF"
-dark_color = "#FFFFFF"
+color = "#4F6D50"
+dark_color = "#4F6D50"
 android_gravity = "center"
 hide_animation = true
